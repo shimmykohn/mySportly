@@ -40,7 +40,7 @@ Design:
 ### 2. New shell and Home
 
 - Tabs: **Home · Guide · My Stuff · Search** (`.sidebarAdaptable` on iPad). Live, Sports and Library tabs are removed, and their useful content moves into Home and My Stuff.
-- Settings is opened from a profile button on Home's navigation bar. It contains Sources, OpenAI key, Region and language, and Appearance. Nothing else.
+- Settings is opened from a profile button on Home's navigation bar. It contains Sources, OpenAI key, Region and language, Appearance, and iCloud sync. Nothing else.
 - Home layout, top to bottom:
   1. **Hero banner:** up to 3 pages, swipeable. Priority: a followed team's live game → a followed team's next game today → a big game in an added league (live first) → a live program on a favorite channel. Art is team colors plus both team logos from the bundled sports reference, on Liquid Glass, or the channel logo for non-game picks. Actions: Watch, Follow/Favorite.
   2. **Your teams:** live and upcoming games for followed teams (live badge, start time).
