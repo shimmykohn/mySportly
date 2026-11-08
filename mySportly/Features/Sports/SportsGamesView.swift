@@ -51,7 +51,7 @@ struct SportsGameView: View {
     var body: some View {
         let index = store.sportsData.index
         List {
-            if let game = index.games[gameID] {
+            if let game = store.game(gameID) {
                 Section {
                     if let away = index.teams[game.awayID] { NavigationLink { SportsLibraryItemView(item: away.libraryItem) } label: { SportsLibraryLabel(item: away.libraryItem) } }
                     if let home = index.teams[game.homeID] { NavigationLink { SportsLibraryItemView(item: home.libraryItem) } label: { SportsLibraryLabel(item: home.libraryItem) } }

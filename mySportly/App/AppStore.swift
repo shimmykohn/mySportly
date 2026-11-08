@@ -287,11 +287,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
 
     var homeContent: HomeContent {
         var counts: [String: Int] = [:]
-        for (gameID, links) in homeSports.links {
-            // Snapshot links were filtered by audience when saved; before the
-            // full catalog exists only presence and hiding can be checked.
-            counts[gameID] = catalogReady ? feeds(for: gameID).count
-                : links.filter { link in channelIndex[link.channelID].map { !flag($0, "hidden") } ?? false }.count
+        for gameID in homeSports.links.keys {
+            counts[gameID] = feeds(for: gameID).count
         }
         return HomeContent.build(sports: homeSports, follows: homeFollows, feedCounts: counts,
                                  favorites: favorites.map { HomeChannel(channelID: $0.id, program: now(on: $0)) }, at: clock)
@@ -339,6 +336,11 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                 leagues: [SportsLeague(id: "sample.nba", name: "NBA")],
                 teams: [SportsTeam(id: "sample.knicks", name: "New York Knicks", leagueID: "sample.nba", logo: URL(string: "https://media.api-sports.io/basketball/teams/151.png")), SportsTeam(id: "sample.celtics", name: "Boston Celtics", leagueID: "sample.nba", logo: URL(string: "https://media.api-sports.io/basketball/teams/133.png"))],
                 games: [SportsGame(id: "sample.game", leagueID: "sample.nba", homeID: "sample.knicks", awayID: "sample.celtics", timestamp: (now - 15 * 60).timeIntervalSince1970, status: .live)]))
+        }
+        if ProcessInfo.processInfo.arguments.contains("--demo-home-follows") {
+            saveSportsItem(SportsLibraryItem(name: "New York Knicks", kind: .team))
+            saveSportsItem(SportsLibraryItem(name: "NBA", kind: .league))
+            try? personal.set("channel.sample.0.favorite", true)
         }
         if ProcessInfo.processInfo.arguments.contains("--demo-sports-check") {
             for index in catalog.programs.indices where catalog.programs[index].guideID == "sports" {
@@ -729,13 +731,17 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func waitForSportsMatching() async { await sportsMatchTask?.value }
     func feeds(for gameID: String, playableOnly: Bool = false) -> [Channel] {
         let date = clock
-        if playableOnly, sportsData.index.games[gameID]?.canWatch(at: date) != true { return [] }
+        if playableOnly, game(gameID)?.canWatch(at: date) != true { return [] }
         return (gameLinks[gameID] ?? []).compactMap { link in
+            // Before the full catalog, links come from the launch snapshot,
+            // which kept only feeds that matched the audience when saved.
             guard (!playableOnly || link.isValid(at: date)), let channel = channelIndex[link.channelID], !flag(channel, "hidden"),
-                  audience.includes(language: language(channel), region: region(channel)) else { return nil }
+                  !catalogReady || audience.includes(language: language(channel), region: region(channel)) else { return nil }
             return channel
         }.sorted { name($0).localizedStandardCompare(name($1)) == .orderedAscending }
     }
+    /// A matched game, or one restored from the launch snapshot.
+    func game(_ id: String) -> SportsGame? { sportsData.index.games[id] ?? homeSports.games.first { $0.id == id } }
     func watchGame(_ game: SportsGame, feed: Channel? = nil) {
         let available = feeds(for: game.id, playableOnly: true)
         if let feed, !available.contains(where: { $0.id == feed.id }) {
