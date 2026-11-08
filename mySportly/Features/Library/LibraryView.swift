@@ -23,7 +23,6 @@ struct LibraryView: View {
             }
             if query.isEmpty {
                 Section {
-                    NavigationLink { RecordingsView() } label: { Label("Recordings", systemImage: "record.circle") }
                     NavigationLink { RemindersView() } label: { Label("Reminders", systemImage: "bell") }
                 }
             }
@@ -113,34 +112,6 @@ struct AddToLibraryView: View {
                 NavigationLink { CategoryChannelsView(category: category) } label: { Text(category) }
             } }
         }.navigationTitle("Add to Library")
-    }
-}
-
-struct RecordingsView: View {
-    @Environment(AppStore.self) private var store
-    @State private var deleting: RecordingItem?
-    var body: some View {
-        List {
-            Section { Text("Recordings are stored on this device. Recording stops when the app leaves the foreground.").font(.footnote).foregroundStyle(.secondary) }
-            if store.recorder.items.isEmpty { ContentUnavailableView("No Recordings", systemImage: "record.circle", description: Text("Start a supported recording from the player.")) }
-            ForEach(store.recorder.items) { item in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(item.title).font(.headline)
-                    Text(item.channelName).foregroundStyle(.secondary)
-                    Text(item.startedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption)
-                    Text("\(item.status) · \(Duration.seconds(item.duration).formatted(.time(pattern: .hourMinuteSecond))) · \(ByteCountFormatter.string(fromByteCount: item.bytes, countStyle: .file))").font(.caption).foregroundStyle(.secondary)
-                    if !item.detail.isEmpty { Text(item.detail).font(.footnote) }
-                    if item.id == store.recorder.activeID { Button("Stop Recording") { Task { await store.recorder.stop() } } }
-                    else if item.duration > 0 { Button("Play Recording", systemImage: "play") { Task { do { try await store.playback.playRecording(item); store.showPlayer = true } catch { store.inform("Recording unavailable", "Saved video could not be opened.") } } } }
-                }
-                .swipeActions { if item.id != store.recorder.activeID { Button("Delete", role: .destructive) { deleting = item } } }
-            }
-            if let error = store.recorder.errorMessage { Section { Text(error).foregroundStyle(.secondary) } }
-        }
-        .navigationTitle("Recordings")
-        .confirmationDialog("Delete this recording?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            if let item = deleting { Button("Delete Recording", role: .destructive) { do { try store.recorder.delete(item); deleting = nil } catch { store.inform("Couldn’t delete", error.localizedDescription) } } }
-        }
     }
 }
 

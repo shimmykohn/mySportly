@@ -41,7 +41,6 @@ struct PlaybackAlternative {
     private var preferredLanguage = "en"
     private var title: String?
     private var remoteTargets: [Any] = []
-    private var recordingServer: LocalRecordingServer?
 
     init() {
         timeObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
@@ -64,7 +63,7 @@ struct PlaybackAlternative {
 
     func play(_ channel: Channel, url: URL, title: String?, preferredLanguage: String, alternates: [PlaybackAlternative] = []) {
         if self.channel?.id != channel.id { previous = self.channel }
-        cancelPending(); recordingServer?.stop(); recordingServer = nil
+        cancelPending()
         self.channel = channel; currentURL = url; self.title = title; self.preferredLanguage = preferredLanguage
         alternatives = Array(alternates.filter { $0.channel.id != channel.id }.prefix(2))
         videoUnavailable = false; playbackNotice = nil
@@ -223,7 +222,6 @@ struct PlaybackAlternative {
     }
     func stop() {
         cancelPending(); clearItemObservers(); player.replaceCurrentItem(with: nil)
-        recordingServer?.stop(); recordingServer = nil
         channel = nil; currentURL = nil; isPlaying = false; isLoading = false; hasVideoFrame = false; wantsPlayback = false; audioReady = false; errorMessage = nil
         alternatives = []; playbackNotice = nil; videoUnavailable = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -240,17 +238,8 @@ struct PlaybackAlternative {
     private func updateNowPlaying() {
         guard let channel else { return }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [MPMediaItemPropertyTitle: title ?? channel.name,
-            MPMediaItemPropertyArtist: channel.name, MPNowPlayingInfoPropertyIsLiveStream: recordingServer == nil,
+            MPMediaItemPropertyArtist: channel.name, MPNowPlayingInfoPropertyIsLiveStream: true,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0]
-    }
-    func playRecording(_ recording: RecordingItem) async throws {
-        stop()
-        let server = LocalRecordingServer(directory: RecordingController.directory.appending(path: recording.id.uuidString))
-        let url = try await server.start()
-        let channel = Channel(id: "recording.\(recording.id)", sourceID: recording.sourceID, name: recording.title)
-        play(channel, url: url, title: recording.title, preferredLanguage: preferredLanguage)
-        recordingServer = server
-        updateNowPlaying()
     }
 }
 

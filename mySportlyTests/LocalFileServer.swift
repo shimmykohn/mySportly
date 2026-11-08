@@ -1,10 +1,10 @@
 import Foundation
 import Network
 
-/// AVPlayer reads saved HLS through a loopback-only endpoint. No video leaves the device.
-final class LocalRecordingServer: @unchecked Sendable {
+/// Test-only loopback file server for playback and download checks.
+final class LocalFileServer: @unchecked Sendable {
     private let directory: URL
-    private let queue = DispatchQueue(label: "mySportly.recording-playback")
+    private let queue = DispatchQueue(label: "mySportly.test-file-server")
     private let lock = NSLock()
     private var listener: NWListener?
     init(directory: URL) { self.directory = directory.standardizedFileURL }

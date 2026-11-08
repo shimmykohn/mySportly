@@ -17,7 +17,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     #endif
     let personal: PersonalStore
     let playback = PlaybackController()
-    let recorder = RecordingController()
     let reminders = ReminderController()
     let intelligence = IntelligenceService()
     let organization = OrganizationProgress()
@@ -241,7 +240,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         catalogReady = true
         showFirstFrame()
         let restoreState = launchSignposter.beginInterval("restoreState")
-        await reminders.reload(); await recorder.reload()
+        await reminders.reload()
         let revision = personal.revision
         await personal.refreshCloudStatus()
         await organization.restore()
@@ -371,7 +370,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         #endif
         rebuild(force: true)
         await waitForCatalog()
-        await reminders.reload(); await recorder.reload()
+        await reminders.reload()
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--demo-organization-progress") { startDemoOrganization() }
         #endif
@@ -383,7 +382,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         let active = Set(sources.map(\.id))
         if importRequiresExistingSource, let importingSource, !active.contains(importingSource) { cancelImport() }
         if let source = playback.channel?.sourceID, !active.contains(source) { playback.stop() }
-        if let source = recorder.sourceID, !active.contains(source) { Task { await recorder.stop(reason: "Source removed") } }
         if !personal.value("preferences.cloudAI", default: false) { cancelOrganization() }
         guard force || requestedPersonalRevision != personal.catalogRevision else { return }
         requestedPersonalRevision = personal.catalogRevision
@@ -660,7 +658,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func removeSource(_ source: TVSource) async {
         if importingSource == source.id { cancelImport(); _ = await importTask?.value }
         if playback.channel?.sourceID == source.id { playback.stop() }
-        if recorder.sourceID == source.id { await recorder.stop(reason: "Source removed") }
         do {
             try personal.remove("source.\(source.id)")
             rebuild()
@@ -682,7 +679,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             let preferred: String = personal.value(key(channel, "preferredVariant"), default: channel.id)
             let chosen = program == nil && !explicitFeed ? (channelIndex[preferred] ?? channel) : channel
             guard let source = sources.first(where: { $0.id == chosen.sourceID }) else { throw CatalogError.rejected }
-            let occupied = (recorder.sourceID == source.id ? 1 : 0) + (multiviewCounts[source.id] ?? 0)
+            let occupied = (multiviewCounts[source.id] ?? 0)
             if occupied >= source.connectionLimit { inform("Connection limit", "Stop another stream or recording first, or update your provider’s verified connection limit."); return }
             let secrets = try KeychainStore.credentials(chosen.sourceID) ?? SourceSecrets()
             let url = try provider.playbackURL(chosen, secrets: secrets, program: program)
@@ -1004,11 +1001,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             updates.updateValue(nil, forKey: "organizer.undo")
             try personal.write(updates); rebuild()
         } catch { inform("Undo unavailable", error.localizedDescription) }
-    }
-    func startRecording() async {
-        guard let channel = playback.channel, let url = playback.currentURL, let source = sources.first(where: { $0.id == channel.sourceID }) else { return }
-        guard source.connectionLimit >= 2 + (multiviewCounts[source.id] ?? 0) else { inform("Recording needs another connection", "This recorder downloads the stream while the player is open. Confirm the provider’s connection limit in Source settings or stop another stream."); return }
-        await recorder.start(channel: channel, url: url, title: now(on: channel)?.title ?? name(channel))
     }
     func clearHistory() {
         do { try personal.write(Dictionary(uniqueKeysWithValues: personal.keys(prefix: "history.").map { ($0, Optional<Data>.none) })); rebuild() }

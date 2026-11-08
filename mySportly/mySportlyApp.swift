@@ -17,7 +17,6 @@ import Combine
                     if phase == .background {
                         store.organizationEnteredBackground()
                         store.scheduleSourceRefresh()
-                        Task { await store.recorder.stop(reason: "The app left the foreground. Saved segments are retained.") }
                     }
                     if phase == .active {
                         store.clock = .now

@@ -71,7 +71,7 @@ struct MultiviewScreen: View {
         do {
             guard let source = store.sources.first(where: { $0.id == channel.sourceID }) else { return }
             let existing = slots.filter { $0.channel.sourceID == source.id && $0.id != replacing }.count
-            let recording = store.recorder.sourceID == source.id ? 1 : 0
+            let recording = 0
             guard existing + recording < source.connectionLimit else { message = "\(source.name) allows \(source.connectionLimit) simultaneous connection(s). Remove a stream or stop recording first."; choosing = false; return }
             let url = try ProviderClient().playbackURL(channel, secrets: KeychainStore.credentials(channel.sourceID) ?? SourceSecrets())
             let replacingIndex = slots.firstIndex { $0.id == replacing }

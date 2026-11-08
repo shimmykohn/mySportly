@@ -65,23 +65,4 @@ import Testing
         #expect(result.count == 1)
         #expect(result.first?.channelID == "real")
     }
-    @Test func hlsRetainsSequenceAndResolvesRelativeSegments() throws {
-        let text = "#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:48\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nfirst.ts\n#EXT-X-DISCONTINUITY\n#EXTINF:3.5,\nsecond.ts\n#EXT-X-ENDLIST"
-        let playlist = try HLSPlaylist.parse(text, baseURL: URL(string: "https://example.test/live/index.m3u8")!)
-        #expect(playlist.segments.count == 2)
-        #expect(playlist.segments.first?.sequence == 48)
-        #expect(playlist.segments.first?.url.absoluteString == "https://example.test/live/first.ts")
-        #expect(playlist.segments.last?.discontinuity == true)
-        #expect(playlist.ended)
-    }
-    @Test func recordingRejectsEncryptedHLSInsteadOfSavingBrokenFiles() throws {
-        #expect(throws: CatalogError.self) {
-            try HLSPlaylist.parse("#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"secret.key\"\n#EXTINF:4,\na.ts", baseURL: URL(string: "https://example.test/live.m3u8")!)
-        }
-    }
-    @Test func recordingRejectsInvalidDurationsAndSeparateAudio() throws {
-        let base = URL(string: "https://example.test/live.m3u8")!
-        #expect(throws: CatalogError.self) { try HLSPlaylist.parse("#EXTM3U\n#EXTINF:-4,\na.ts", baseURL: base) }
-        #expect(throws: CatalogError.self) { try HLSPlaylist.parse("#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",URI=\"audio.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=10000,AUDIO=\"audio\"\nvideo.m3u8", baseURL: base) }
-    }
 }

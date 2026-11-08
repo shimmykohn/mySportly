@@ -122,7 +122,7 @@ public struct TVGuide: Sendable {
 }
 
 public enum CatalogError: Error, LocalizedError, Equatable {
-    case invalidURL, invalidPlaylist, invalidGuide, tooLarge, noChannels, rejected, unsupportedRecording(String)
+    case invalidURL, invalidPlaylist, invalidGuide, tooLarge, noChannels, rejected
     public var errorDescription: String? {
         switch self {
         case .invalidURL: "Enter a valid HTTP or HTTPS address."
@@ -131,7 +131,6 @@ public enum CatalogError: Error, LocalizedError, Equatable {
         case .tooLarge: "This source exceeds the import size limit. Try a smaller playlist or guide."
         case .noChannels: "No playable channel addresses were found."
         case .rejected: "The provider rejected this request. Check the connection details and subscription."
-        case .unsupportedRecording(let reason): reason
         }
     }
 }

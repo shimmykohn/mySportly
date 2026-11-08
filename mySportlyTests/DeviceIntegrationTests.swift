@@ -11,7 +11,7 @@ import XCTest
         let directory = FileManager.default.temporaryDirectory.appending(path: "missing-stream-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let server = LocalRecordingServer(directory: directory)
+        let server = LocalFileServer(directory: directory)
         defer { server.stop() }
         let url = try await server.start()
         let playback = PlaybackController()
@@ -54,7 +54,7 @@ import XCTest
         defer { try? FileManager.default.removeItem(at: directory) }
         let xml = Data("<tv><programme channel=\"test\" start=\"20261018120000 +0000\" stop=\"20261018130000 +0000\"><title>Download check</title></programme></tv>".utf8)
         try xml.write(to: directory.appending(path: "index.m3u8"))
-        let server = LocalRecordingServer(directory: directory)
+        let server = LocalFileServer(directory: directory)
         defer { server.stop() }
         let url = try await server.start()
         let downloadUpdates = Mutex<[TransferProgress]>([])
@@ -143,37 +143,6 @@ import XCTest
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertNil(playback.player.currentItem)
         XCTAssertFalse(playback.isPlaying)
-    }
-
-    func testRecordedHLSSegmentsReplayLocally() async throws {
-        let channel = try XCTUnwrap(SampleCatalog.snapshot().channels.first)
-        let directory = FileManager.default.temporaryDirectory.appending(path: "mySportly-recording-test-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let worker = RecordingWorker()
-        let recording = Task { try await worker.record(url: try XCTUnwrap(channel.streamURL), directory: directory) { _, _ in } }
-        do {
-            try await waitUntil(timeout: 35) { FileManager.default.fileExists(atPath: directory.appending(path: "index.m3u8").path) }
-        } catch {
-            recording.cancel()
-            _ = await recording.result
-            throw error
-        }
-        recording.cancel()
-        switch await recording.result {
-        case .success: break
-        case .failure(let error) where error is CancellationError: break
-        case .failure(let error as URLError) where error.code == .cancelled: break
-        case .failure(let error): throw error
-        }
-        let server = LocalRecordingServer(directory: directory)
-        let playback = PlaybackController()
-        defer { playback.stop(); server.stop() }
-        let url = try await server.start()
-        playback.play(channel, url: url, title: "Local recording integration check", preferredLanguage: "en")
-        try await waitUntil(timeout: 25) { playback.isPlaying && playback.player.currentTime().seconds > 1 }
-        XCTAssertEqual(playback.player.currentItem?.status, .readyToPlay)
-        XCTAssertGreaterThan(playback.player.currentItem?.presentationSize.width ?? 0, 0)
-        XCTAssertNil(playback.errorMessage)
     }
 
     func testPrivateCloudContainerCanBeReached() async throws {

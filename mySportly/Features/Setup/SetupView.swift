@@ -138,6 +138,6 @@ struct SourcesView: View {
         .navigationTitle("Sources")
         .confirmationDialog("Remove this source?", isPresented: Binding(get: { remove != nil }, set: { if !$0 { remove = nil } }), titleVisibility: .visible) {
             if let source = remove { Button("Remove \(source.name)", role: .destructive) { Task { await store.removeSource(source); remove = nil } } }
-        } message: { Text("This removes the catalog and connection details. Recordings stay on this device.") }
+        } message: { Text("This removes the catalog and connection details.") }
     }
 }
