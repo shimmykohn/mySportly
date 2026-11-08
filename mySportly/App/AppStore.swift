@@ -48,6 +48,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     @ObservationIgnored private var requestedPersonalRevision = -1
     @ObservationIgnored private var preparationID = UUID()
     @ObservationIgnored private var queryIndexTask: Task<Void, Never>?
+    @ObservationIgnored private var launchSnapshotTask: Task<Void, Never>?
     @ObservationIgnored private let catalogLifetime = CatalogSnapshotLifetime()
     @ObservationIgnored private var widgetTask: Task<Void, Never>?
     @ObservationIgnored private var intentCatalogTask: Task<Void, Never>?
@@ -331,11 +332,34 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                 self.matchSportsGames()
                 self.updateWidgetSnapshot()
                 self.updateIntentCatalog()
+                self.saveLaunchSnapshot(prepared, overrides: overrides)
                 await self.catalogLifetime.retain(prepared, revision: self.queryRevision)
             } catch {
                 guard let self, self.preparationID == id else { return }
                 self.preparingCatalog = false
             }
+        }
+    }
+
+    /// Debounced so a burst of personal edits writes the snapshot once.
+    private func saveLaunchSnapshot(_ prepared: PreparedCatalog, overrides: [String: Data]) {
+        guard !demo else { return }
+        launchSnapshotTask?.cancel()
+        let cache = cache
+        guard !sources.isEmpty else { launchSnapshotTask = Task { await cache.removeLaunchSnapshot() }; return }
+        let recentIDs = personal.keys(prefix: "history.").map { ($0, personal.value($0, default: Date.distantPast)) }
+            .sorted { $0.1 > $1.1 }.prefix(12).map { String($0.0.dropFirst("history.".count)) }
+        launchSnapshotTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let snapshot = try? await catalogWork({
+                let decoder = JSONDecoder()
+                var manual: [String: String] = [:]
+                for (key, data) in overrides where key.hasPrefix("channel.") && key.hasSuffix(".guideID") {
+                    if let id = try? decoder.decode(String.self, from: data) { manual[String(key.dropFirst("channel.".count).dropLast(".guideID".count))] = id }
+                }
+                return LaunchSnapshot(prepared: prepared, recentIDs: recentIDs, manualGuideIDs: manual, now: .now)
+            }) else { return }
+            try? await cache.saveLaunchSnapshot(snapshot)
         }
     }
 
