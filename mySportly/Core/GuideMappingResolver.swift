@@ -1,6 +1,6 @@
 import Foundation
 
-public struct GuideMatch: Hashable, Sendable {
+public struct GuideMatch: Codable, Hashable, Sendable {
     public var guideID: String
     public var reason: String
 }
