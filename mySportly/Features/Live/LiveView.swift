@@ -54,7 +54,7 @@ struct LiveView: View {
                     Section("Lineup") { LineupScopePicker().pickerStyle(.inline) }
                     NavigationLink { InterestsView() } label: { Label("Edit Interests", systemImage: "heart") }
                 } label: { Label("Filter Channels", systemImage: "line.3.horizontal.decrease") }
-                .accessibilityIdentifier(store.loading ? "live-filters-loading" : "live-filters")
+                .accessibilityIdentifier(store.catalogReady ? "live-filters" : "live-filters-loading")
             }
         }
         .task(id: favoritesRequest) { await store.favoritesToday.update(favoritesRequest, store: store) }
