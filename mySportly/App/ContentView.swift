@@ -21,7 +21,6 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $store.showPlayer) {
             PlayerScreen().navigationTransition(.zoom(sourceID: store.playerSourceID ?? "player.accessory", in: playerNamespace))
         }
-        .fullScreenCover(isPresented: $store.showMultiview) { MultiviewScreen().scrollEdgeEffectStyle(.soft, for: .top) }
         .alert(store.notice?.title ?? "mySportly", isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } }), presenting: store.notice) { _ in Button("OK", role: .cancel) { store.notice = nil } } message: { Text($0.message) }
         .overlay { if store.loading && store.selectedTab != .home { ProgressView("Opening your saved lineup…").padding().background(.background, in: .rect(cornerRadius: 12)).accessibilityIdentifier("catalog-loading") } }
     }

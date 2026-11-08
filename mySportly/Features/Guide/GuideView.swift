@@ -1,5 +1,4 @@
 import SwiftUI
-import Translation
 
 struct GuideView: View {
     @Environment(AppStore.self) private var store
@@ -247,43 +246,18 @@ struct GuideMappingView: View {
 struct ProgramDetailView: View {
     @Environment(AppStore.self) private var store
     let program: GuideProgram; let channel: Channel
-    @State private var minutesBefore = 0
-    @State private var translated: String?
-    @State private var translation: TranslationSession.Configuration?
-    private var spoilersHidden: Bool { store.spoilerFree && program.isSports }
-    private var catchupAvailable: Bool { channel.archiveDays > 0 && program.end <= store.clock && program.start > store.clock.addingTimeInterval(-Double(channel.archiveDays) * 86400) }
     var body: some View {
         List {
             Section {
-                if !spoilersHidden, let image = program.image { AsyncImage(url: image) { image in image.resizable().scaledToFit() } placeholder: { ProgressView() }.frame(maxHeight: 220).accessibilityHidden(true) }
+                if let image = program.image { AsyncImage(url: image) { image in image.resizable().scaledToFit() } placeholder: { ProgressView() }.frame(maxHeight: 220).accessibilityHidden(true) }
                 Text(program.title).font(.title2.bold())
                 Text(store.name(channel)).foregroundStyle(.secondary)
                 Text(program.start.formatted(date: .complete, time: .shortened))
-                Text("Until \(program.end.formatted(date: .omitted, time: .shortened)) · \(TimeZone.current.abbreviation() ?? "Local time")").font(.subheadline).foregroundStyle(.secondary)
+                Text("Until \(program.end.formatted(date: .omitted, time: .shortened))").font(.subheadline).foregroundStyle(.secondary)
                 if program.isLive(at: store.clock) { Button("Watch Live", systemImage: "play.fill") { store.play(channel) } }
-                else if catchupAvailable { Button("Watch Catch-up", systemImage: "gobackward") { store.play(channel, program: program) } }
-                else if program.end <= store.clock { Text("Catch-up is unavailable for this program.").foregroundStyle(.secondary) }
             }
-            if spoilersHidden { Section { Label("Sports descriptions and artwork are hidden", systemImage: "eye.slash") } }
-            else if !program.summary.isEmpty {
-                Section("Description") {
-                    Text(program.summary).textSelection(.enabled)
-                    Button("Translate Description", systemImage: "translate") { translation = TranslationSession.Configuration(source: nil, target: Locale.Language(identifier: store.personal.value("preferences.guideLanguage", default: store.languages.first ?? "en"))) }
-                    if let translated { Text(translated); Text("Translated description · Original retained above").font(.caption).foregroundStyle(.secondary) }
-                }
-            }
-            if program.start > store.clock {
-                Section("Reminder") {
-                    Picker("Notify Me", selection: $minutesBefore) { Text("At Start").tag(0); Text("5 Minutes Before").tag(5); Text("15 Minutes Before").tag(15) }
-                    Button("Set Reminder", systemImage: "bell.badge") { Task { do { try await store.reminders.schedule(program: program, channel: channel, minutesBefore: minutesBefore); store.inform("Reminder saved", "You’ll be notified on this device before the program starts.") } catch { store.inform("Reminder unavailable", error.localizedDescription) } } }
-                }
-            }
-            Section { NavigationLink("Channel Details") { ChannelDetailView(channel: channel) } }
+            if !program.summary.isEmpty { Section { Text(program.summary).textSelection(.enabled) } }
         }
         .navigationTitle("Program").navigationBarTitleDisplayMode(.inline)
-        .translationTask(translation) { session in
-            do { translated = try await session.translate(program.summary).targetText }
-            catch { store.inform("Translation unavailable", "The selected language could not be translated. The original description remains available.") }
-        }
     }
 }

@@ -253,20 +253,13 @@ actor ProviderClient {
         return url
     }
 
-    nonisolated func playbackURL(_ channel: Channel, secrets: SourceSecrets, program: GuideProgram? = nil) throws -> URL {
-        if let direct = channel.streamURL, program == nil { return direct }
+    nonisolated func playbackURL(_ channel: Channel, secrets: SourceSecrets) throws -> URL {
+        if let direct = channel.streamURL { return direct }
         var base = try HTTPClient.url(secrets.address)
         if base.pathExtension == "php" { base.deleteLastPathComponent() }
         var components = URLComponents(url: base, resolvingAgainstBaseURL: false)!
         components.query = nil; components.fragment = nil
         guard let root = components.url else { throw CatalogError.invalidURL }
-        if let program {
-            guard channel.archiveDays > 0, program.end <= .now, program.start >= Date.now.addingTimeInterval(-Double(channel.archiveDays) * 86400) else { throw CatalogError.rejected }
-            let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.timeZone = TimeZone(secondsFromGMT: 0); formatter.dateFormat = "yyyy-MM-dd:HH-mm"
-            let minutes = Int(ceil(program.end.timeIntervalSince(program.start) / 60))
-            return root.appending(path: "timeshift").appending(component: secrets.username).appending(component: secrets.password)
-                .appending(component: String(minutes)).appending(component: formatter.string(from: program.start)).appending(component: "\(channel.providerID).m3u8")
-        }
         return root.appending(path: "live").appending(component: secrets.username).appending(component: secrets.password).appending(component: "\(channel.providerID).\(secrets.output)")
     }
 }

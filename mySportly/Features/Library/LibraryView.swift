@@ -21,11 +21,6 @@ struct LibraryView: View {
                     ForEach(items) { LibraryBookmarkRow(item: $0) }
                 }
             }
-            if query.isEmpty {
-                Section {
-                    NavigationLink { RemindersView() } label: { Label("Reminders", systemImage: "bell") }
-                }
-            }
         }
         .navigationTitle("My Stuff")
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your Library")
@@ -115,37 +110,3 @@ struct AddToLibraryView: View {
     }
 }
 
-struct RemindersView: View {
-    @Environment(AppStore.self) private var store
-    @State private var editing: ProgramReminder?
-    var body: some View {
-        List {
-            if store.reminders.permission == .denied { Section { Text("Notifications are disabled. Enable them for mySportly in device Settings."); Button("Open Settings") { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } } } }
-            if store.reminders.reminders.isEmpty { ContentUnavailableView("No Reminders", systemImage: "bell", description: Text("Open an upcoming program in Guide or Sports to set one.")) }
-            ForEach(store.reminders.reminders) { reminder in
-                Button { editing = reminder } label: {
-                    VStack(alignment: .leading, spacing: 4) { Text(reminder.title).font(.headline); Text(reminder.channelName); Text(reminder.fireDate.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary) }
-                }.buttonStyle(.plain).swipeActions { Button("Cancel", role: .destructive) { Task { await store.reminders.cancel(reminder.id) } } }
-            }
-        }
-        .navigationTitle("Reminders").task { await store.reminders.reload() }
-        .sheet(item: $editing) { reminder in ReminderEditor(reminder: reminder) }
-    }
-}
-private struct ReminderEditor: View {
-    @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
-    let reminder: ProgramReminder
-    @State private var date = Date.now
-    var body: some View {
-        NavigationStack {
-            Form { Text(reminder.title); DatePicker("Notify Me", selection: $date, in: Date.now...) }
-                .navigationTitle("Edit Reminder")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                    ToolbarItem(placement: .confirmationAction) { Button("Save") { Task { do { try await store.reminders.reschedule(reminder, date: date); dismiss() } catch { store.inform("Reminder unavailable", error.localizedDescription) } } } }
-                }
-                .task { date = reminder.fireDate }
-        }
-    }
-}

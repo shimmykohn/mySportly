@@ -27,7 +27,6 @@ import Combine
                             await store.personal.refreshCloudStatus()
                             if store.personal.revision != revision { store.rebuild() }
                             await store.restoreMissingSources()
-                            await store.reminders.reload()
                             AppRouteInbox.consume(using: store)
                             await store.refreshDueSources()
                         }

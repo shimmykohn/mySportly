@@ -17,7 +17,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     #endif
     let personal: PersonalStore
     let playback = PlaybackController()
-    let reminders = ReminderController()
     let intelligence = IntelligenceService()
     let organization = OrganizationProgress()
     let sportsData = SportsDataStore()
@@ -68,7 +67,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     var playerSourceID: String?
     var showSettings = false
     var showSetup = false
-    var showMultiview = false
     var notice: AppNotice?
     var loading = true
     /// True once the full saved catalog has been prepared at least once.
@@ -97,7 +95,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     var searchRequest: String?
     var libraryRoute: LibraryBookmark?
     var demo = false
-    var multiviewCounts: [UUID: Int] = [:]
     private var attemptedRestores = Set<UUID>()
 
     init(inMemory: Bool = false, registerBackground: Bool = false) {
@@ -191,7 +188,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         } catch { inform("Changes weren’t saved", error.localizedDescription) }
     }
     var usesHistory: Bool { personal.value("preferences.history", default: true) }
-    var spoilerFree: Bool { personal.value("preferences.spoilerFree", default: true) }
     var canUndo: Bool { personal.has("organizer.undo") }
 
     func load() async {
@@ -240,7 +236,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         catalogReady = true
         showFirstFrame()
         let restoreState = launchSignposter.beginInterval("restoreState")
-        await reminders.reload()
         let revision = personal.revision
         await personal.refreshCloudStatus()
         await organization.restore()
@@ -370,7 +365,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         #endif
         rebuild(force: true)
         await waitForCatalog()
-        await reminders.reload()
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--demo-organization-progress") { startDemoOrganization() }
         #endif
@@ -674,22 +668,20 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         } catch { inform("Source removal", safeError(error)) }
     }
 
-    func play(_ channel: Channel, program: GuideProgram? = nil, gameID: String? = nil, explicitFeed: Bool = false, source zoomSource: String? = nil) {
+    func play(_ channel: Channel, gameID: String? = nil, explicitFeed: Bool = false, source zoomSource: String? = nil) {
         do {
             let preferred: String = personal.value(key(channel, "preferredVariant"), default: channel.id)
-            let chosen = program == nil && !explicitFeed ? (channelIndex[preferred] ?? channel) : channel
-            guard let source = sources.first(where: { $0.id == chosen.sourceID }) else { throw CatalogError.rejected }
-            let occupied = (multiviewCounts[source.id] ?? 0)
-            if occupied >= source.connectionLimit { inform("Connection limit", "Stop another stream or recording first, or update your provider’s verified connection limit."); return }
+            let chosen = !explicitFeed ? (channelIndex[preferred] ?? channel) : channel
+            guard sources.contains(where: { $0.id == chosen.sourceID }) else { throw CatalogError.rejected }
             let secrets = try KeychainStore.credentials(chosen.sourceID) ?? SourceSecrets()
-            let url = try provider.playbackURL(chosen, secrets: secrets, program: program)
+            let url = try provider.playbackURL(chosen, secrets: secrets)
             let options = gameID.map { feeds(for: $0, playableOnly: true) } ?? variants(of: chosen)
-            let alternates = program == nil ? options.filter { $0.id != chosen.id && $0.sourceID == chosen.sourceID }.prefix(2).compactMap { alternate -> PlaybackAlternative? in
+            let alternates = options.filter { $0.id != chosen.id && $0.sourceID == chosen.sourceID }.prefix(2).compactMap { alternate -> PlaybackAlternative? in
                 guard let url = try? provider.playbackURL(alternate, secrets: secrets) else { return nil }
                 return PlaybackAlternative(channel: alternate, url: url)
-            } : []
+            }
             activeSportsGameID = gameID
-            playback.play(chosen, url: url, title: program?.title ?? now(on: chosen)?.title, preferredLanguage: personal.value("preferences.audioLanguage", default: languages.first ?? "en"), alternates: alternates)
+            playback.play(chosen, url: url, title: now(on: chosen)?.title, preferredLanguage: personal.value("preferences.audioLanguage", default: languages.first ?? "en"), alternates: alternates)
             if usesHistory { try personal.set("history.\(chosen.id)", Date.now) }
             if !showPlayer { playerSourceID = zoomSource }
             showPlayer = true

@@ -123,31 +123,3 @@ private struct PlayerDetails: View {
         }
     }
 }
-
-struct ChannelChooser: View {
-    @Environment(AppStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
-    let choose: (Channel) -> Void
-    @State private var search = ""
-    @State private var browser = ChannelBrowser()
-    @State private var limit = 100
-    private var request: ChannelBrowseRequest {
-        var request = ChannelBrowseRequest(); request.query = search; request.collapseVariants = true; request.audience = store.audience; return request
-    }
-    var body: some View {
-        List {
-            Section { LineupScopeControl() }
-            if browser.loading { ProgressView("Finding channels…") }
-            ForEach(browser.channels.prefix(limit)) { channel in
-                Button { choose(channel) } label: { ChannelRow(channel: channel) }.buttonStyle(.plain)
-            }
-            MoreChannelsRow(total: browser.channels.count, limit: $limit)
-        }
-        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always)).navigationTitle("Choose Channel")
-        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
-        .task(id: BrowseTaskID(revision: store.queryRevision, request: request)) {
-            limit = 100
-            await browser.update(directory: store.directory, request: request)
-        }
-    }
-}

@@ -45,14 +45,10 @@ struct LocaleSettingsView: View {
                 Button("Add Region") { addRegion = true }
                 Text("Regions describe channel editions, not your GPS location. English alone does not mean United States.").font(.footnote).foregroundStyle(.secondary)
             }
-            Section("Playback and Guide") {
+            Section("Playback") {
                 Picker("Preferred Audio", selection: Binding(get: { store.personal.value("preferences.audioLanguage", default: store.languages.first ?? "en") }, set: { store.set("preferences.audioLanguage", $0) })) {
                     ForEach(Array(Set(store.languages + ["en"])).sorted(), id: \.self) { Text(Locale.current.localizedString(forLanguageCode: $0) ?? $0).tag($0) }
                 }
-                Picker("Guide Translation", selection: Binding(get: { store.personal.value("preferences.guideLanguage", default: store.languages.first ?? "en") }, set: { store.set("preferences.guideLanguage", $0) })) {
-                    ForEach(Array(Set(store.languages + ["en"])).sorted(), id: \.self) { Text(Locale.current.localizedString(forLanguageCode: $0) ?? $0).tag($0) }
-                }
-                Text("Translation changes the description only. Audio and captions depend on the stream.").font(.footnote).foregroundStyle(.secondary)
             }
         }
         .navigationTitle("Region and Language").toolbar { EditButton() }
@@ -91,7 +87,6 @@ struct InterestsView: View {
                     })).accessibilityIdentifier("interest-\(category)")
                 }
             }
-            Toggle("Hide Sports Descriptions and Artwork", isOn: Binding(get: { store.spoilerFree }, set: { store.set("preferences.spoilerFree", $0) }))
         }.navigationTitle("Interests and Sports")
     }
 }
