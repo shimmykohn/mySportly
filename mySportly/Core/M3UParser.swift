@@ -3,7 +3,11 @@ import CryptoKit
 
 public enum StableID {
     public static func hash(_ text: String) -> String {
-        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+        // Lowercase hex without String(format:), which dominated catalog preparation.
+        let digits = Array("0123456789abcdef".utf8)
+        var bytes: [UInt8] = []; bytes.reserveCapacity(64)
+        for byte in SHA256.hash(data: Data(text.utf8)) { bytes.append(digits[Int(byte >> 4)]); bytes.append(digits[Int(byte & 0x0f)]) }
+        return String(decoding: bytes, as: UTF8.self)
     }
     public static func channel(source: UUID, provider: String) -> String { source.uuidString + ":" + hash(provider) }
 }
