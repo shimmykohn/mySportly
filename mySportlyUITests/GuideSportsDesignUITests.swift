@@ -78,7 +78,7 @@ import UIKit
         setFavorite(app, to: false)
         XCTAssertTrue(app.staticTexts["In Your Library"].exists)
         app.selectMainTab("Home")
-        XCTAssertTrue(app.buttons["home-game-sample.game"].waitForExistence(timeout: 10), "A saved team stays on Home without a star")
+        XCTAssertTrue(games.firstMatch.waitForExistence(timeout: 10), "A saved team stays on Home without a star")
     }
     private func back(_ app: XCUIApplication, expecting destination: XCUIElement) {
         // Notification banners can absorb toolbar taps on a personal device.

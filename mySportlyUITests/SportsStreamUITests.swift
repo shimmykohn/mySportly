@@ -11,7 +11,7 @@ import UIKit
         app.launchArguments = ["--demo", "--demo-sports-api-check", "--demo-home-follows"]
         app.launch()
         app.waitForSavedCatalog()
-        let homeGame = app.buttons["home-game-sample.game"].firstMatch
+        let homeGame = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'home-game-'")).firstMatch
         XCTAssertTrue(homeGame.waitForExistence(timeout: 15))
         capture("Home - followed team's live game")
         homeGame.tap()
