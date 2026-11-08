@@ -58,10 +58,64 @@ struct LaunchSnapshotTests {
     }
 
     @Test func roundTripsThroughCatalogCodec() throws {
-        let snapshot = LaunchSnapshot(prepared: try prepared(), recentIDs: ["c350"], now: now)
+        let snapshot = try withSports(recentIDs: ["c350"])
         let decoded = try CatalogCodec.decode(LaunchSnapshot.self, from: CatalogCodec.encode(snapshot))
         #expect(decoded.channels == snapshot.channels)
         #expect(decoded.guide == snapshot.guide)
         #expect(decoded.lineupIDs == snapshot.lineupIDs)
+        #expect(decoded.sports?.games == snapshot.sports?.games)
+        #expect(decoded.sports?.links == snapshot.sports?.links)
+    }
+
+    // MARK: Home sports data
+
+    var game: SportsGame { SportsGame(id: "game", leagueID: "nba", homeID: "knicks", awayID: "celtics", timestamp: (now - 600).timeIntervalSince1970, guideEnd: (now + 3 * 3600).timeIntervalSince1970) }
+
+    func sports(feed: String) -> HomeSportsData {
+        var data = HomeSportsData()
+        data.games = [game]
+        data.teams = ["knicks": SportsTeam(id: "knicks", name: "New York Knicks", leagueID: "nba"), "celtics": SportsTeam(id: "celtics", name: "Boston Celtics", leagueID: "nba")]
+        data.leagues = ["nba": SportsLeague(id: "nba", name: "NBA")]
+        data.links = ["game": [SportsFeedLink(gameID: "game", channelID: feed, programID: nil, validFrom: now - 3600, validUntil: now + 4 * 3600, evidence: "test")]]
+        return data
+    }
+
+    func withSports(recentIDs: [String] = [], favorites: [Channel]? = nil, feed: String = "c250") throws -> LaunchSnapshot {
+        let prepared = try prepared()
+        return LaunchSnapshot(favorites: favorites ?? prepared.directory.favorites, recentIDs: recentIDs, lineup: prepared.directory.lineup,
+                              channelsByID: prepared.channelsByID, guide: prepared.guide, guideMatches: prepared.guideMappings.matches,
+                              sports: sports(feed: feed), now: now)
+    }
+
+    @Test func decodesSnapshotWithoutSportsKey() throws {
+        let snapshot = try withSports()
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as! [String: Any]
+        json.removeValue(forKey: "sports")
+        let decoded = try CatalogCodec.decode(LaunchSnapshot.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(decoded.sports == nil)
+        #expect(decoded.channels.map(\.id) == snapshot.channels.map(\.id))
+    }
+
+    @Test func feedChannelsFollowRecentsAndPrecedeLineup() throws {
+        let ids = try withSports(recentIDs: ["c350"]).channels.map(\.id)
+        #expect(Array(ids.prefix(6)) == ["c390", "c391", "c392", "c350", "c250", "c000"])
+    }
+
+    @Test func linksToChannelsOverTheLimitAreDropped() throws {
+        let prepared = try prepared()
+        let favorites = Array(prepared.directory.lineup.prefix(LaunchSnapshot.channelLimit))
+        let snapshot = try withSports(favorites: favorites, feed: "c399")
+        #expect(snapshot.sports?.links.isEmpty == true)
+        #expect(snapshot.sports?.games.map(\.id) == ["game"])
+    }
+
+    @Test func activeDropsEndedGamesAndMissingChannels() throws {
+        let snapshot = try withSports()
+        let later = snapshot.active(sources: [source], now: now + 3 * 3600 + 60)
+        #expect(later.sports?.games.isEmpty == true)
+        #expect(later.sports?.links.isEmpty == true)
+        let removed = snapshot.active(sources: [], now: now)
+        #expect(removed.sports?.links.isEmpty == true)
+        #expect(snapshot.active(sources: [source], now: now).sports?.links["game"]?.count == 1)
     }
 }
