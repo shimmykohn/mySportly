@@ -54,6 +54,24 @@ actor SportsLogoCache {
         trimIfNeeded()
         return result
     }
+    private var colors: [URL: RGB?] = [:]
+    /// The logo's dominant team color, from the same cached artwork.
+    func color(url: URL) async -> RGB? {
+        if let known = colors[url] { return known }
+        guard let image = await image(url: url, pixels: 32) else { return nil }
+        let width = 32, height = 32
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                          space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        let color = drawn ? TeamColor.dominant(rgba: bytes, width: width, height: height) : nil
+        if colors.count >= 400 { colors.removeAll(keepingCapacity: true) }
+        colors[url] = color
+        return color
+    }
     private func trimIfNeeded() {
         guard Date.now.timeIntervalSince(lastTrim) > 60 else { return }; lastTrim = .now
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey])) ?? []
