@@ -6,7 +6,7 @@ import UIKit
         continueAfterFailure = false
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
     }
-    func testHomeGamePlaysAndGamePageFeedPicker() throws {
+    func testHomeGameAndTeamPageGamePlay() throws {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "--demo-sports-api-check", "--demo-home-follows"]
         app.launch()
@@ -23,20 +23,12 @@ import UIKit
         app.buttons["Stop"].firstMatch.tap()
         // The same game is reachable from the team's page in My Stuff.
         app.selectMainTab("My Stuff")
-        let team = app.buttons["library-item-New York Knicks"].firstMatch
+        let team = app.buttons["my-stuff-team-New York Knicks"].firstMatch
         XCTAssertTrue(team.waitForExistence(timeout: 10)); team.tap()
-        let game = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'sports-game-'")).firstMatch
+        let game = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'home-game-'")).firstMatch
         XCTAssertTrue(game.waitForExistence(timeout: 10))
-        capture("Team page - game")
+        capture("Team page - live game")
         game.tap()
-        let watch = app.buttons["watch-sports-game"]
-        XCTAssertTrue(watch.waitForExistence(timeout: 10))
-        XCTAssertTrue(watch.isEnabled)
-        let gamePicker = app.buttons["game-stream-picker"]
-        reveal(gamePicker, app: app); gamePicker.tap()
-        app.buttons["Sample Sports Alternate HD"].tap()
-        capture("Game page - native stream picker selection")
-        watch.tap()
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         waitForVideo(preview)
     }

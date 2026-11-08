@@ -79,7 +79,7 @@ struct InterestsView: View {
     }
     var body: some View {
         Form {
-            Section { NavigationLink("Teams and Leagues") { SportsFollowingView() } }
+            Section { NavigationLink("Teams and Leagues") { FollowPicker() } }
             Section("Interests") {
                 ForEach(categories, id: \.self) { category in
                     Toggle(category, isOn: Binding(get: { store.interests.contains(category) }, set: { include in

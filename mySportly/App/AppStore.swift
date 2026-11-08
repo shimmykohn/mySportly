@@ -132,13 +132,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         let revision = personal.revision
         if sportsLibraryRevision == revision { return savedSports }
         var items: [String: SportsLibraryItem] = [:]
-        for kind in SportsFollowKind.allCases {
-            let legacy: [String] = personal.value(kind == .team ? "preferences.teams" : "preferences.leagues", default: [])
-            for name in legacy {
-                let item = SportsLibraryItem(name: name, kind: kind)
-                if item.name.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) { items[item.id] = item }
-            }
-        }
+        // Legacy preferences.teams/leagues lists became explicit entries in
+        // FollowMigration; only explicit entries count from here on.
         for key in personal.keys(prefix: "sports.library.") {
             guard let entry: SportsLibraryEntry = personal.value(key, default: Optional<SportsLibraryEntry>.none) else { continue }
             if entry.saved { items[entry.item.id] = entry.item }
@@ -169,7 +164,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func removeSportsItem(_ item: SportsLibraryItem) {
         do {
             try personal.write(["sports.library.\(item.id)": try JSONEncoder().encode(SportsLibraryEntry(item: item, saved: false)),
-                                "sports.favorite.\(item.id)": nil])
+                                "sports.favorite.\(item.id)": nil, "sports.notify.\(item.id)": nil])
         } catch { inform("Changes weren’t saved", error.localizedDescription) }
     }
     func setSportsFavorite(_ item: SportsLibraryItem, _ favorite: Bool) {
@@ -236,6 +231,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         await organization.restore()
         if personal.revision != revision { rebuild() }
         launchSignposter.endInterval("restoreState", restoreState)
+        runFollowMigration()
         await restoreMissingSources()
         routingReady = true
         AppRouteInbox.consume(using: self)
@@ -284,7 +280,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
 
     func isFollowing(_ team: SportsTeam) -> Bool { homeFollows.teamIDs.contains(team.libraryItem.id) }
     func toggleFollow(_ team: SportsTeam) {
-        if isFollowing(team) { removeSportsItem(team.libraryItem) } else { saveSportsItem(team.libraryItem) }
+        if isFollowing(team) { unfollow(team.libraryItem) } else { follow(team.libraryItem) }
     }
 
     /// Search before the full index exists: snapshot channels whose display
@@ -471,15 +467,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func category(_ channel: Channel) -> String { personal.value(key(channel, "category"), default: directory?.metadata[channel.id]?.category ?? "Unsorted") }
     func set<T: Encodable>(_ key: String, _ value: T) {
         do {
-            var changes: [String: Data?] = [key: try JSONEncoder().encode(value)]
-            if key.hasPrefix("channel."), key.hasSuffix(".favorite"),
-               let channel = channelIndex[String(key.dropFirst(8).dropLast(9))] {
-                let item = bookmark(channel)
-                if (value as? Bool) == true || flag(channel, "favorite") {
-                    changes["library.item.\(item.id)"] = try JSONEncoder().encode(item)
-                }
-            }
-            try personal.write(changes); rebuild()
+            try personal.write([key: try JSONEncoder().encode(value)]); rebuild()
         } catch { inform("Changes weren’t saved", error.localizedDescription) }
     }
     func remove(_ key: String) { do { try personal.remove(key); rebuild() } catch { inform("Changes weren’t saved", error.localizedDescription) } }
@@ -508,18 +496,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func reorder(_ channels: [Channel]) {
         do { try personal.write(Dictionary(uniqueKeysWithValues: try channels.enumerated().map { (key($0.element, "order"), Optional(try JSONEncoder().encode($0.offset))) })); rebuild() }
         catch { inform("Order wasn’t saved", error.localizedDescription) }
-    }
-    func bulk(_ ids: Set<String>, field: String, value: Bool) {
-        do {
-            var changes = Dictionary(uniqueKeysWithValues: try ids.map { ("channel.\($0).\(field)", Optional(try JSONEncoder().encode(value))) })
-            if field == "favorite" {
-                for id in ids { if let channel = channelIndex[id], value || flag(channel, "favorite") {
-                    let item = bookmark(channel); changes["library.item.\(item.id)"] = try JSONEncoder().encode(item)
-                } }
-            }
-            try personal.write(changes); rebuild()
-        }
-        catch { inform("Changes weren’t saved", error.localizedDescription) }
     }
 
     func programs(for channel: Channel) -> [GuideProgram] {
@@ -727,6 +703,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                 home.games = result.index.orderedGames; home.teams = result.index.teams; home.leagues = result.index.leagues; home.links = links
                 self.homeSports = home
                 self.saveLaunchSnapshot()
+                self.scheduleGameAlerts()
                 self.matchedSportsPrograms = Set(links.values.flatMap { $0.compactMap(\.programID) })
                 self.matchingGames = false; self.sportsLinkRevision += 1
             } catch { if !Task.isCancelled { self?.matchingGames = false } }

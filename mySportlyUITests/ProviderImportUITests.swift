@@ -144,7 +144,7 @@ final class ProviderImportUITests: XCTestCase {
         connect.tap()
         XCTAssertTrue(app.navigationBars["Welcome"].waitForNonExistence(timeout: 150), "The source should finish importing through the normal setup flow.")
         if app.navigationBars["Sources"].exists { app.buttons["Done"].tap() }
-        XCTAssertTrue(app.buttons["All Channels"].waitForExistence(timeout: 30))
+        app.waitForSavedCatalog(timeout: 30)
         XCTAssertFalse(app.alerts["Couldn’t connect"].exists)
         XCTAssertFalse(app.alerts["Guide refresh"].exists)
 

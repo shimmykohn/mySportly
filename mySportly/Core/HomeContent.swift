@@ -52,6 +52,7 @@ public struct HomeGame: Identifiable, Hashable, Sendable {
     public let game: SportsGame
     public let state: HomeGameState
     public let feedCount: Int
+    public init(game: SportsGame, state: HomeGameState, feedCount: Int) { self.game = game; self.state = state; self.feedCount = feedCount }
     public var id: String { game.id }
 }
 

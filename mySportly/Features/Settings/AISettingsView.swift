@@ -32,7 +32,6 @@ struct AISettingsView: View {
                         .accessibilityIdentifier("start-lineup-organization")
                     LabeledContent("New or Changed Groups", value: pending.formatted())
                 }
-                NavigationLink("Review Results") { OrganizerView() }
             } header: { Text("Progress and Results") } footer: {
                 Text("Every completed batch is saved. Refreshes reuse unchanged results. A system Live Activity shows supported background runs; if iOS stops one, reopen the app and tap Resume. Saved decisions sync through your private iCloud account.")
             }
@@ -177,3 +176,54 @@ struct OrganizationRunStatus: View {
     }
 }
 
+
+struct JevConnectionView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var key = ""
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent("Jev", value: store.intelligence.jevConfigured ? "Key saved on this device" : "Not connected")
+                SecureField("Your TypeSafe API key", text: $key).textInputAutocapitalization(.never).autocorrectionDisabled()
+                Button("Save Key") {
+                    do { try store.intelligence.saveJevKey(key); key = ""; dismiss() }
+                    catch { store.inform("Couldn’t save key", error.localizedDescription) }
+                }.disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if store.intelligence.jevConfigured { Button("Remove Key", role: .destructive) {
+                    do { store.cancelOrganization(); try store.intelligence.removeJevKey() }
+                    catch { store.inform("Couldn’t remove key", error.localizedDescription) }
+                } }
+            } footer: { Text("Your personal key is stored in this device’s Keychain. It is not included in the app, playlist, or iCloud preferences.") }
+        }.navigationTitle("Jev Connection")
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close", systemImage: "xmark") { dismiss() }.tint(.primary) } }
+    }
+}
+
+struct OrganizationHelpView: View {
+    var body: some View {
+        List {
+            Section("Your Content") {
+                LabeledContent("Source", value: "Your provider or playlist")
+                LabeledContent("Channel Group", value: "Matching names, with all streams retained")
+                LabeledContent("Category", value: "Sports, News, or another broad subject")
+                LabeledContent("Subcategory", value: "A narrower subject, such as American Football")
+                LabeledContent("League", value: "A competition, such as NFL")
+                LabeledContent("Team", value: "A participant in a league")
+                LabeledContent("Game", value: "Opponents and a scheduled time")
+                LabeledContent("Stream", value: "One playable feed for a channel or game")
+            }
+            Section("Your Choices") {
+                LabeledContent("My Lineup", value: "Your language and region filter")
+                LabeledContent("Interests", value: "Categories expanded first on Live")
+                LabeledContent("Library", value: "Teams and leagues you save")
+                LabeledContent("Favorite", value: "A saved item you want to prioritize")
+                LabeledContent("Favorites Today", value: "Watchable guide matches now or later today")
+            }
+            Section("Organization") {
+                Text("The app filters by your languages and regions, then groups shared names locally. Jev chooses from the category and subcategory names you manage in AI settings. None leaves a group for review so you can add a suitable name.")
+                Text("Refreshes keep saved group decisions. Changed game titles are checked again against the guide. Manual corrections always win.")
+            }
+        }.navigationTitle("App Terms")
+    }
+}

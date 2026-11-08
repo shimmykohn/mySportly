@@ -85,7 +85,6 @@ struct GuideView: View {
                             Toggle("Only Channels with Listings", isOn: Binding(get: { withListingsOnly }, set: { store.set("preferences.guideWithListings", $0) }))
                         }
                         if sizeClass == .regular { Section("Layout") { Toggle("Timeline", isOn: $timeline) } }
-                        Section { NavigationLink("TV Guide Status") { GuideStatusView() } }
                     } else {
                         DatePicker("Guide Time", selection: Binding(get: { date }, set: { chosenDate = $0; followsNow = false }), displayedComponents: [.date, .hourAndMinute])
                         Button("Return to Now") { followsNow = true; store.clock = .now; sheet = nil }

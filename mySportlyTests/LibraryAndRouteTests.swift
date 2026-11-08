@@ -3,27 +3,20 @@ import Testing
 @testable import mySportly
 
 @MainActor @Suite(.serialized) struct LibraryAndRouteTests {
-    @Test func savesAreIndependentAndFavoritesKeepTheItemSaved() async throws {
+    @Test func followsAndFavoritesAreIndependent() async throws {
         let store = AppStore(inMemory: true); await store.loadDemo()
-        let league = SportsLibraryItem(name: "NFL", kind: .league), team = SportsLibraryItem(name: "Cowboys", kind: .team)
-        store.saveSportsItem(league)
-        #expect(store.sportsLibrary == [league])
-        #expect(!store.hasSportsItem(team))
-        store.saveSportsItem(team); store.setSportsFavorite(team, true)
-        store.removeSportsItem(league)
-        #expect(store.hasSportsItem(team)); #expect(store.isSportsFavorite(team))
+        let league = SportsLibraryItem(name: "NFL", kind: .league), team = SportsLibraryItem(name: "Dallas Cowboys", kind: .team)
+        store.follow(league)
+        #expect(store.addedLeagues == [league])
+        #expect(!store.isFollowing(team), "Adding a league does not follow its teams")
+        store.follow(team); store.unfollow(league)
+        #expect(store.isFollowing(team))
+        #expect(store.addedLeagues.isEmpty)
         let channel = try #require(store.channels.first)
         store.toggle(channel, "favorite"); await store.waitForCatalog()
+        #expect(store.favorites.contains { $0.id == channel.id })
         store.toggle(channel, "favorite"); await store.waitForCatalog()
-        #expect(!store.flag(channel, "favorite"))
-        #expect(store.hasLibraryItem(store.bookmark(channel)))
-        let category = LibraryBookmark.category(["Sports", "Golf"])
-        store.saveLibraryItem(category); store.setLibraryFavorite(category, true)
-        store.personal.reload(); store.rebuild(force: true); await store.waitForCatalog()
-        #expect(store.savedLibraryItems.contains(category))
-        #expect(store.isLibraryFavorite(category))
-        store.removeLibraryItem(category)
-        #expect(!store.hasLibraryItem(category)); #expect(!store.isLibraryFavorite(category))
+        #expect(!store.favorites.contains { $0.id == channel.id })
     }
     @Test func linksRouteToTabsAndDoNotStartAI() async throws {
         let store = AppStore(inMemory: true); await store.loadDemo()

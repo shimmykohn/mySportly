@@ -2,7 +2,7 @@ import XCTest
 import UIKit
 
 @MainActor final class LineupFilteringUITests: XCTestCase {
-    func testNativeLineupFilterIsSharedWithSearchAndGuideStatus() {
+    func testNativeLineupFilterIsSharedWithSearch() {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
         let app = XCUIApplication()
@@ -17,18 +17,6 @@ import UIKit
         assertValue(count, "1")
         app.selectLineup("My Lineup")
         assertValue(count, "4")
-        app.buttons["Guide Filters"].firstMatch.tap()
-        let status = app.buttons["TV Guide Status"].firstMatch
-        if !status.isHittable { app.swipeUp() }
-        status.tap()
-        capture("Guide status navigation")
-        XCTAssertTrue(app.navigationBars["TV Guide Status"].waitForExistence(timeout: 5))
-        capture("Native guide status opened")
-        assertValue(app.staticTexts["guide-status-channels"].firstMatch, "4")
-        assertValue(app.staticTexts["guide-status-matched"].firstMatch, "4")
-        capture("Native guide coverage")
-        app.buttons["BackButton"].firstMatch.tap()
-        app.buttons["close-guide-options"].tap()
         app.selectMainTab("Search")
         let field = app.searchFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 5))

@@ -69,10 +69,7 @@ struct HomeView: View {
         }
         .refreshable { Task { await store.refreshDueSources(force: true) } }
         .sheet(isPresented: $choosingFollows) {
-            NavigationStack {
-                SportsFollowingView(kind: .team)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { choosingFollows = false } } }
-            }
+            NavigationStack { FollowPicker() }
         }
     }
 }

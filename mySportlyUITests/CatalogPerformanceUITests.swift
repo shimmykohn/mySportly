@@ -26,28 +26,6 @@ import UIKit
         let guideCount = app.staticTexts["guide-channel-count"].firstMatch
         let readyGuide = NSPredicate { _, _ in (Int(guideCount.value as? String ?? "0") ?? 0) > 50_000 }
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: readyGuide, evaluatedWith: nil)], timeout: 12), .completed)
-        app.selectMainTab("My Stuff")
-        var start = Date()
-        app.buttons["All Channels"].firstMatch.tap()
-        XCTAssertTrue(app.switches["Include Hidden Channels"].waitForExistence(timeout: 8))
-        print("[CatalogPerformance] all_channels_open_seconds=\(Date().timeIntervalSince(start))")
-        app.swipeUp()
-        capture("Saved catalog channels and soft header", app: app)
-        app.navigationBars["Channels"].buttons.element(boundBy: 0).tap()
-        start = Date()
-        app.buttons["Organizer"].firstMatch.tap()
-        XCTAssertTrue(app.buttons["organize-groups"].waitForExistence(timeout: 8))
-        print("[CatalogPerformance] organizer_controls_seconds=\(Date().timeIntervalSince(start))")
-        let count = app.staticTexts["organizer-result-count"].firstMatch
-        let readySuggestions = NSPredicate { _, _ in (Int(count.value as? String ?? "0") ?? 0) > 0 }
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: readySuggestions, evaluatedWith: nil)], timeout: 20), .completed)
-        capture("Saved catalog organizer", app: app)
-        app.navigationBars["Organizer"].buttons.element(boundBy: 0).tap()
-        app.buttons["Groups"].firstMatch.tap()
-        app.buttons["Add Group"].tap()
-        XCTAssertTrue(app.textFields["Group Name"].waitForExistence(timeout: 8))
-        app.buttons["Cancel"].tap()
-        app.navigationBars["Groups"].buttons.element(boundBy: 0).tap()
         app.selectMainTab("Home")
         app.buttons["home-profile"].firstMatch.tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))

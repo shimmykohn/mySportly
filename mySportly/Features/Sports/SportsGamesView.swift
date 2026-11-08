@@ -53,9 +53,9 @@ struct SportsGameView: View {
         List {
             if let game = store.game(gameID) {
                 Section {
-                    if let away = index.teams[game.awayID] { NavigationLink { SportsLibraryItemView(item: away.libraryItem) } label: { SportsLibraryLabel(item: away.libraryItem) } }
-                    if let home = index.teams[game.homeID] { NavigationLink { SportsLibraryItemView(item: home.libraryItem) } label: { SportsLibraryLabel(item: home.libraryItem) } }
-                    if let league = index.leagues[game.leagueID] { NavigationLink(league.name) { SportsLibraryItemView(item: league.libraryItem) } }
+                    if let away = index.teams[game.awayID] { NavigationLink { TeamPage(team: away.libraryItem) } label: { SportsItemLabel(item: away.libraryItem) } }
+                    if let home = index.teams[game.homeID] { NavigationLink { TeamPage(team: home.libraryItem) } label: { SportsItemLabel(item: home.libraryItem) } }
+                    if let league = index.leagues[game.leagueID] { NavigationLink(league.name) { LeaguePage(league: league.libraryItem) } }
                     LabeledContent(game.guideEnd == nil ? "Starts" : "Guide Time") { Text(game.start, format: .dateTime.weekday().month().day().hour().minute()) }
                     if game.status == .postponed { Label("Postponed", systemImage: "clock.badge.exclamationmark") }
                     if game.status == .cancelled { Text("Cancelled") }

@@ -8,7 +8,7 @@ struct ContentView: View {
         TabView(selection: $store.selectedTab) {
             Tab("Home", systemImage: "house", value: AppTab.home) { NavigationStack { HomeView() } }
             Tab("Guide", systemImage: "list.bullet.rectangle", value: AppTab.guide) { NavigationStack { GuideView() } }
-            Tab("My Stuff", systemImage: "square.stack", value: AppTab.myStuff) { NavigationStack { LibraryView() } }
+            Tab("My Stuff", systemImage: "square.stack", value: AppTab.myStuff) { NavigationStack { MyStuffView() } }
             Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) { NavigationStack { SearchScreen() } }
         }
         .tabViewStyle(.sidebarAdaptable)
@@ -39,7 +39,7 @@ struct ChannelRow: View {
                 else { Text([store.category(channel), channel.quality].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary) }
             }
             Spacer(minLength: 4)
-            if store.flag(channel, "favorite") { Image(systemName: "star.fill").foregroundStyle(.secondary).accessibilityLabel("Favorite") }
+            if store.flag(channel, "favorite") { Image(systemName: "heart.fill").foregroundStyle(.pink).accessibilityLabel("Favorite") }
         }
         .accessibilityElement(children: .combine)
     }
@@ -48,29 +48,17 @@ struct ChannelRow: View {
 struct PlayableChannelRow: View {
     @Environment(AppStore.self) private var store
     let channel: Channel
-    var canRemoveFromHistory = false
-    @State private var details = false
     var body: some View {
         Button { store.play(channel, source: "channel.\(channel.id)") } label: { ChannelRow(channel: channel).contentShape(.rect) }
             .playerSource("channel.\(channel.id)")
             .buttonStyle(.plain)
-            .accessibilityIdentifier("\(canRemoveFromHistory ? "recent" : "play")-channel-\(channel.id)")
+            .accessibilityIdentifier("play-channel-\(channel.id)")
             .accessibilityHint("Plays this channel")
             .contextMenu {
                 Button("Watch", systemImage: "play") { store.play(channel) }
-                LibrarySaveButton(item: store.bookmark(channel))
-                Button(store.flag(channel, "favorite") ? "Remove Favorite" : "Add Favorite", systemImage: "star") { store.toggle(channel, "favorite") }
-                Button("Channel Details", systemImage: "info.circle") { details = true }
+                Button(store.flag(channel, "favorite") ? "Remove Favorite" : "Favorite", systemImage: store.flag(channel, "favorite") ? "heart.slash" : "heart") { store.toggle(channel, "favorite") }
                 Button("Hide Channel", systemImage: "eye.slash") { store.toggle(channel, "hidden") }
             }
-            .swipeActions(edge: .trailing) {
-                if canRemoveFromHistory {
-                    Button("Remove", systemImage: "clock.badge.xmark", role: .destructive) { store.removeFromHistory(channel) }
-                        .accessibilityLabel("Remove from Recently Watched")
-                }
-                Button("Details", systemImage: "info.circle") { details = true }
-            }
-            .swipeActions(edge: .leading) { Button("Favorite", systemImage: "star") { store.toggle(channel, "favorite") }.tint(.orange) }
-            .sheet(isPresented: $details) { NavigationStack { ChannelDetailView(channel: channel).toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { details = false } } } } }
+            .swipeActions(edge: .leading) { Button("Favorite", systemImage: "heart") { store.toggle(channel, "favorite") }.tint(.pink) }
     }
 }

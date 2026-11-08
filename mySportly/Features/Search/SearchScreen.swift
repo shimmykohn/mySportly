@@ -10,7 +10,6 @@ struct SearchScreen: View {
     @State private var busy = false
     @State private var interpreting = false
     @State private var lineupRequest = false
-    @State private var preview = false
     @State private var searchTask: Task<Void, Never>?
     @State private var generation = UUID()
 
@@ -24,7 +23,6 @@ struct SearchScreen: View {
                     Button("Ask Apple Intelligence", systemImage: "sparkles") { search(usingAI: true) }
                         .disabled(busy || !store.intelligence.appleAvailable)
                 }
-                if !results.isEmpty { Button(lineupRequest ? "Preview Requested Lineup" : "Make a Group from Results", systemImage: "folder.badge.plus") { preview = true } }
             }
             if query.isEmpty {
                 Section("Try a Search") {
@@ -58,7 +56,6 @@ struct SearchScreen: View {
         .onAppear { receiveSiriSearch(); if !query.isEmpty { search(usingAI: false) } }
         .onChange(of: store.searchRequest) { _, _ in receiveSiriSearch() }
         .onDisappear { searchTask?.cancel(); generation = UUID(); busy = false; interpreting = false }
-        .sheet(isPresented: $preview) { NavigationStack { GroupEditor(initialIDs: results.map(\.id)) } }
     }
 
     private func receiveSiriSearch() {
