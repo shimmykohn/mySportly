@@ -44,7 +44,8 @@ struct LiveView: View {
             }
         }
         .accessibilityIdentifier("home-root")
-        .accessibilityValue("launch-ms=\(store.launchTimeline.milliseconds(to: .firstInteractive) ?? -1)")
+        // Verbatim: a localized key would format 1234 as "1,234".
+        .accessibilityValue(Text(verbatim: "launch-ms=\(store.launchTimeline.milliseconds(to: .firstInteractive) ?? -1)"))
         .navigationTitle("").navigationBarTitleDisplayMode(.inline).appToolbar()
         .toolbar {
             ToolbarItem(placement: .principal) { LiveLoadingIndicator(browser: browser) }

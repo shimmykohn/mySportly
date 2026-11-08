@@ -16,7 +16,8 @@ import XCTest
         let home = app.descendants(matching: .any)["home-root"].firstMatch
         XCTAssertTrue(home.waitForExistence(timeout: 5))
         let value = try XCTUnwrap(home.value as? String)
-        let ms = try XCTUnwrap(Int(value.replacingOccurrences(of: "launch-ms=", with: "")))
+        print("[LaunchBudget] home-root value: \(value)")
+        let ms = try XCTUnwrap(Int(value.replacingOccurrences(of: "launch-ms=", with: "")), "Unexpected home-root value: \(value)")
         print("[LaunchBudget] first_interactive_ms=\(ms)")
         XCTAssertGreaterThan(ms, 0)
         XCTAssertLessThanOrEqual(ms, 1500)
