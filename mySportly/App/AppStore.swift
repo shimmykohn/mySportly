@@ -25,6 +25,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     let sportsScreen = SportsScreenModel()
     let favoritesToday = FavoritesTodayModel()
     private(set) var gameLinks: [String: [SportsFeedLink]] = [:]
+    /// Home's games; restored from the launch snapshot, replaced by guide matching.
+    private(set) var homeSports = HomeSportsData()
     private(set) var matchedSportsPrograms = Set<String>()
     private(set) var sportsLinkRevision = 0
     private(set) var matchingGames = false
@@ -274,6 +276,30 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         favorites = snapshot.favoriteIDs.compactMap { byID[$0] }
         guideIndex = snapshot.guide
         guideMatches = snapshot.guideMatches
+        homeSports = snapshot.sports ?? HomeSportsData()
+        gameLinks = homeSports.links
+    }
+
+    var homeFollows: HomeFollows {
+        let items = sportsLibrary
+        return HomeFollows(teamIDs: Set(items.filter { $0.kind == .team }.map(\.id)), leagueIDs: Set(items.filter { $0.kind == .league }.map(\.id)))
+    }
+
+    var homeContent: HomeContent {
+        var counts: [String: Int] = [:]
+        for (gameID, links) in homeSports.links {
+            // Snapshot links were filtered by audience when saved; before the
+            // full catalog exists only presence and hiding can be checked.
+            counts[gameID] = catalogReady ? feeds(for: gameID).count
+                : links.filter { link in channelIndex[link.channelID].map { !flag($0, "hidden") } ?? false }.count
+        }
+        return HomeContent.build(sports: homeSports, follows: homeFollows, feedCounts: counts,
+                                 favorites: favorites.map { HomeChannel(channelID: $0.id, program: now(on: $0)) }, at: clock)
+    }
+
+    func isFollowing(_ team: SportsTeam) -> Bool { homeFollows.teamIDs.contains(team.libraryItem.id) }
+    func toggleFollow(_ team: SportsTeam) {
+        if isFollowing(team) { removeSportsItem(team.libraryItem) } else { saveSportsItem(team.libraryItem) }
     }
 
     /// Search before the full index exists: snapshot channels whose display
@@ -394,7 +420,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                 self.matchSportsGames()
                 self.updateWidgetSnapshot()
                 self.updateIntentCatalog()
-                self.saveLaunchSnapshot(prepared, overrides: overrides)
+                self.saveLaunchSnapshot()
                 if let fresh = prepared.freshStages { self.savePreparedStages(fresh) }
                 await self.catalogLifetime.retain(prepared, revision: self.queryRevision)
             } catch {
@@ -404,23 +430,30 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         }
     }
 
-    /// Debounced so a burst of personal edits writes the snapshot once.
-    private func saveLaunchSnapshot(_ prepared: PreparedCatalog, overrides: [String: Data]) {
+    /// Debounced so a burst of personal edits or a rebuild followed by game
+    /// matching writes the snapshot once. Built from published state.
+    private func saveLaunchSnapshot() {
         guard !demo else { return }
         launchSnapshotTask?.cancel()
         let cache = cache
         guard !sources.isEmpty else { launchSnapshotTask = Task { await cache.removeLaunchSnapshot() }; return }
         let recentIDs = personal.keys(prefix: "history.").map { ($0, personal.value($0, default: Date.distantPast)) }
             .sorted { $0.1 > $1.1 }.prefix(12).map { String($0.0.dropFirst("history.".count)) }
+        var manual: [String: String] = [:]
+        for key in personal.keys(prefix: "channel.") where key.hasSuffix(".guideID") {
+            if let id: String = personal.value(key, default: Optional<String>.none) { manual[String(key.dropFirst("channel.".count).dropLast(".guideID".count))] = id }
+        }
+        var sports = homeSports.relevant(to: homeFollows, at: .now)
+        sports.links = Dictionary(uniqueKeysWithValues: sports.games.map { game in
+            let accepted = Set(feeds(for: game.id).map(\.id))
+            return (game.id, (gameLinks[game.id] ?? []).filter { accepted.contains($0.channelID) })
+        }.filter { !$0.1.isEmpty })
+        let favorites = favorites, lineup = lineup, channels = channelIndex, guide = guideIndex, matches = guideMatches
         launchSnapshotTask = Task {
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled, let snapshot = try? await catalogWork({
-                let decoder = JSONDecoder()
-                var manual: [String: String] = [:]
-                for (key, data) in overrides where key.hasPrefix("channel.") && key.hasSuffix(".guideID") {
-                    if let id = try? decoder.decode(String.self, from: data) { manual[String(key.dropFirst("channel.".count).dropLast(".guideID".count))] = id }
-                }
-                return LaunchSnapshot(prepared: prepared, recentIDs: recentIDs, manualGuideIDs: manual, now: .now)
+                LaunchSnapshot(favorites: favorites, recentIDs: recentIDs, lineup: lineup, channelsByID: channels, guide: guide,
+                               guideMatches: matches, manualGuideIDs: manual, sports: sports, now: .now)
             }) else { return }
             try? await cache.saveLaunchSnapshot(snapshot)
         }
@@ -669,7 +702,9 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     }
     func matchSportsGames() {
         sportsMatchTask?.cancel()
-        guard let query = queryIndex, !sportsData.reference.teams.isEmpty else {
+        // Still preparing: keep the games and links the launch snapshot restored.
+        guard let query = queryIndex else { matchingGames = false; return }
+        guard !sportsData.reference.teams.isEmpty else {
             gameLinks = [:]; matchedSportsPrograms = []; matchingGames = false; sportsLinkRevision += 1; return
         }
         let index = sportsData.reference, refreshed = catalog.refreshed, date = clock
@@ -682,6 +717,10 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                 let links = result.links
                 self.sportsData.showGuideGames(result.index)
                 self.gameLinks = links
+                var home = HomeSportsData()
+                home.games = result.index.orderedGames; home.teams = result.index.teams; home.leagues = result.index.leagues; home.links = links
+                self.homeSports = home
+                self.saveLaunchSnapshot()
                 self.matchedSportsPrograms = Set(links.values.flatMap { $0.compactMap(\.programID) })
                 self.matchingGames = false; self.sportsLinkRevision += 1
             } catch { if !Task.isCancelled { self?.matchingGames = false } }
