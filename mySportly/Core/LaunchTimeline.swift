@@ -1,7 +1,7 @@
 import Foundation
 
 public enum LaunchPhase: String, CaseIterable, Sendable {
-    case processStart, loadStarted, snapshotLoaded, firstInteractive, catalogDecoded, catalogPrepared
+    case processStart, storeCreated, loadStarted, snapshotLoaded, firstInteractive, catalogDecoded, catalogPrepared
 }
 
 /// Wall-clock launch milestones, measured from `processStart`. The first mark
@@ -9,6 +9,22 @@ public enum LaunchPhase: String, CaseIterable, Sendable {
 public struct LaunchTimeline: Sendable {
     private var marks: [LaunchPhase: ContinuousClock.Instant] = [:]
     public init() {}
+
+    /// When the kernel started this process, so launch time includes process
+    /// creation, dyld and app initialization before any of our code runs.
+    public static func processStartDate() -> Date? {
+        var info = kinfo_proc(), size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+        guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let started = info.kp_proc.p_un.__p_starttime
+        guard started.tv_sec > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(started.tv_sec) + TimeInterval(started.tv_usec) / 1_000_000)
+    }
+
+    /// The continuous-clock instant matching a past wall-clock date.
+    public static func instant(for date: Date, now: ContinuousClock.Instant = .now, wallNow: Date = Date()) -> ContinuousClock.Instant {
+        now - .milliseconds(Int64((wallNow.timeIntervalSince(date) * 1000).rounded()))
+    }
 
     public mutating func mark(_ phase: LaunchPhase, at instant: ContinuousClock.Instant = .now) {
         if marks[phase] == nil { marks[phase] = instant }
