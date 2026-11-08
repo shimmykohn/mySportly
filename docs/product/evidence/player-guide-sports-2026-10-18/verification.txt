@@ -1,0 +1,44 @@
+Verified October 18, 2026 on physical iPad (A16, iPadOS 27.0.1) and iPhone 17 Pro (iOS 27.0.1).
+Configuration: signed Debug, Swift -O, Xcode 27.1. No simulator used or installed.
+
+Core/persistence package: 45 tests passed. After the final cached-name lookup change, all 3 targeted sports matching and alternate-feed tests passed again.
+iPad: 13 application-state tests plus saved-catalog responsiveness passed. The latter used 57,033 saved channels.
+iPhone: all 13 application-state tests passed on the final application code, including Library membership, separate favorites, legacy follows, removal, and invalid custom names.
+
+UI workflows passed on both devices:
+- Adding/removing teams changes My Sports results; matching channels without EPG stay distinct from scheduled live programs.
+- Saving a team, opening its programs, favoriting, unfavoriting without removal, adding a league, and removing that league/favorite.
+- Opening the actual saved Guide, channel schedule, and separate Guide Filters sheet.
+- Switching My Lineup / All Channels / Unclassified, reading guide coverage, and shared header Search scope/navigation.
+- Showing a native player's actual first video frame, channel chooser, plain close X, and Stop.
+
+Test corrections: the wide iPad labeled switch required tapping its trailing control, not the middle of the row. The iPhone filter helper now verifies sheet presentation and can retry a tap absorbed during a dismissal/system interruption. Both corrected flows passed. One early iPad search transition had an XCTest animation-idle timeout; its final repeat completed the full add/remove workflow in 29.3 seconds. A method-only Swift Testing filter selected zero tests on one iPad retry; the complete final 13-test suite on iPhone verified the latest application-state changes.
+
+Reported real-provider playback: one stream at a time, after checking active=0 / maximum=1. The app recovered from the reported 4K event feed to its exact same-source event alternate, displayed 1280x720 H.264 video, and remained playing with audio. The elapsed values below include the original feed's startup and eight seconds of playing without video before switching; they are not direct alternate-feed startup timings. The original 4K feed was not made decodable.
+
+iPad responsiveness
+FOLLOWING_VERIFIED live=8 upcoming=4 channels_without_listings=11 query_time=0.153228917 seconds
+NAVIGATION_VERIFIED channels=57033 rebuild_enqueue=2.0208e-05 seconds guide_background=0.130842083 seconds organizer_enqueue=0.000741208 seconds main_thread_gap=0.062293542 seconds
+
+iPad reported feed
+[ReportedPlayback] active=0 maximum=1 format=m3u8
+[ReportedPlayback] first_frame=true playing=true size=(1280.0, 720.0) status=1 elapsed=18.432712417 seconds external=false
+[ReportedPlayback] type=vide enabled=true codecs=[1635148593]
+[ReportedPlayback] type=soun enabled=true codecs=[1633772320]
+[ReportedPlayback] type=clcp enabled=true codecs=[1635017571]
+
+iPhone reported feed
+[ReportedPlayback] active=0 maximum=1 format=m3u8
+[ReportedPlayback] first_frame=true playing=true size=(1280.0, 720.0) status=1 elapsed=15.335909832999999 seconds external=false
+[ReportedPlayback] type=vide enabled=true codecs=[1635148593]
+[ReportedPlayback] type=soun enabled=true codecs=[1633772320]
+[ReportedPlayback] type=clcp enabled=true codecs=[1635017571]
+
+iPhone final lineup test
+Test Case '-[mySportlyUITests.LineupFilteringUITests testNativeLineupFilterIsSharedWithSearchAndGuideStatus]' started.
+Test Case '-[mySportlyUITests.LineupFilteringUITests testNativeLineupFilterIsSharedWithSearchAndGuideStatus]' passed (74.889 seconds).
+** TEST SUCCEEDED **
+
+Visual inspection: iPad in light appearance, iPhone in dark appearance. Saved Guide screenshots use the provider catalog; sports examples use the explicitly labeled in-memory sample catalog. Player screenshots use Apple’s public HLS test pattern; separate device tests above prove the reported provider feed's fallback.
+
+Scope limits: no logo API or paid subscription was configured; no new sports-specific iCloud round trip was performed. Sports membership/favorites use the existing private per-field personal store, with reload and mutation behavior covered by application tests. No full VoiceOver/Dynamic Type audit or broad provider codec certification is claimed.

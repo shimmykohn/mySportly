@@ -1,0 +1,37 @@
+Guide mapping and Home cleanup verification — 2026-10-18
+Physical devices only. Debug signing; SWIFT_OPTIMIZATION_LEVEL=-O.
+UI screenshots use an isolated sample profile. Coverage metrics use the real saved catalog.
+No provider request, credential export, model call, or media playback was used.
+
+iPhone 17 Pro:
+[MetadataCoverage] total=57033 raw_regions=0 detected_regions=49517 preferred=11584 guide_matched=472 on_now=468 missing_id=11057 unmatched_id=55 ended=3 unknown_language=11581 guide_visible=469 check_seconds=8.592037375 seconds
+Test Case '-[mySportlyTests.MetadataCoverageTests testSavedCatalogUsesLocalMetadataAndReportsGuideCoverage]' passed (8.638 seconds).
+[GuideRecovery] before=398 after=472 automatic=74 on_now=468 missing_id=11057 unmatched_id=55 home_channels=10326 total_preferred=11584
+Test Case '-[mySportlyTests.MetadataCoverageTests testSavedGuideRecoveryAndHomeCleanup]' passed (10.576 seconds).
+NAVIGATION_VERIFIED channels=57033 rebuild_enqueue=2.375e-05 seconds guide_background=0.091551041 seconds organizer_enqueue=4.025e-05 seconds main_thread_gap=0.040210167 seconds
+✔ Test run with 13 tests in 2 suites passed after 18.189 seconds.
+Test Case '-[mySportlyUITests.HomeCleanupUITests testRecentSwipeRemovesOnlyOneHistoryEntry]' passed (10.643 seconds).
+Test Case '-[mySportlyUITests.LineupFilteringUITests testNativeLineupFilterIsSharedWithSearchAndGuideStatus]' passed (53.834 seconds).
+** TEST SUCCEEDED **
+
+Local core checks: 42 core and 4 persistence tests passed.
+After the final recommendation-deduplication change, the affected ranking/history regression passed again.
+
+iPad A16:
+Test Case '-[mySportlyUITests.HomeCleanupUITests testRecentSwipeRemovesOnlyOneHistoryEntry]' passed (15.889 seconds).
+Test Case '-[mySportlyUITests.LineupFilteringUITests testNativeLineupFilterIsSharedWithSearchAndGuideStatus]' failed (12.309 seconds).
+[MetadataCoverage] total=57033 raw_regions=0 detected_regions=49564 preferred=11584 guide_matched=472 on_now=468 missing_id=11057 unmatched_id=55 ended=3 unknown_language=11581 guide_visible=469 check_seconds=11.364919708 seconds
+Test Case '-[mySportlyTests.MetadataCoverageTests testSavedCatalogUsesLocalMetadataAndReportsGuideCoverage]' passed (11.427 seconds).
+[GuideRecovery] before=398 after=472 automatic=74 on_now=468 missing_id=11057 unmatched_id=55 home_channels=10330 total_preferred=11584
+Test Case '-[mySportlyTests.MetadataCoverageTests testSavedGuideRecoveryAndHomeCleanup]' passed (14.111 seconds).
+NAVIGATION_VERIFIED channels=57033 rebuild_enqueue=3.4333e-05 seconds guide_background=0.125224125 seconds organizer_enqueue=0.001043583 seconds main_thread_gap=0.064034042 seconds
+✔ Test run with 13 tests in 2 suites passed after 23.902 seconds.
+** TEST EXECUTE FAILED **
+The initial navigation failure occurred while an external YouTube picture-in-picture window covered the picker.
+Guide recovery, app state, responsiveness, and the recent-item swipe passed in that run. Navigation was retried after the user moved the overlay.
+
+Final iPad UI run after the external video was moved aside:
+Test Case '-[mySportlyUITests.HomeCleanupUITests testRecentSwipeRemovesOnlyOneHistoryEntry]' passed (13.334 seconds).
+Test Case '-[mySportlyUITests.LineupFilteringUITests testNativeLineupFilterIsSharedWithSearchAndGuideStatus]' passed (58.162 seconds).
+** TEST EXECUTE SUCCEEDED **
+The app binary was unchanged for the retry. Both devices were reopened normally with the saved catalog.

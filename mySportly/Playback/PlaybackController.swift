@@ -1,0 +1,300 @@
+import Foundation
+import AVKit
+import MediaPlayer
+import Observation
+import SwiftUI
+
+struct PlaybackAlternative {
+    let channel: Channel
+    let url: URL
+}
+
+@MainActor @Observable final class PlaybackController {
+    private(set) var player = AVPlayer()
+    private(set) var channel: Channel?
+    private(set) var previous: Channel?
+    private(set) var currentURL: URL?
+    private(set) var isPlaying = false
+    private(set) var isLoading = false
+    private(set) var hasVideoFrame = false
+    private(set) var videoUnavailable = false
+    private(set) var playbackNotice: String?
+    var errorMessage: String?
+    var onFailure: (() -> Void)?
+    var quality: StreamQuality = .automatic { didSet { applyQuality() } }
+    var supportsQualityPreference: Bool { currentURL?.pathExtension.lowercased() == "m3u8" }
+    private var itemObservation: NSKeyValueObservation?
+    private var bufferObservation: NSKeyValueObservation?
+    private var timeObservation: NSKeyValueObservation?
+    private var failedObserver: NSObjectProtocol?
+    private var stalledObserver: NSObjectProtocol?
+    private var retryTask: Task<Void, Never>?
+    private var preparationTask: Task<Void, Never>?
+    private var stallTask: Task<Void, Never>?
+    private var videoTask: Task<Void, Never>?
+    private var alternatives: [PlaybackAlternative] = []
+    private var wantsPlayback = false
+    private var audioReady = false
+    private var startedImmediately = false
+    private var sessionID = UUID()
+    private var attempts = 0
+    private var preferredLanguage = "en"
+    private var title: String?
+    private var remoteTargets: [Any] = []
+    private var recordingServer: LocalRecordingServer?
+
+    init() {
+        timeObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.isPlaying = player.timeControlStatus == .playing
+                if player.timeControlStatus == .paused, self.audioReady, self.preparationTask == nil, player.currentItem?.status == .readyToPlay {
+                    self.wantsPlayback = false
+                }
+                self.isLoading = self.wantsPlayback && (!self.audioReady || player.timeControlStatus == .waitingToPlayAtSpecifiedRate)
+                if self.isPlaying { self.stallTask?.cancel(); self.stallTask = nil }
+                self.updateNowPlaying()
+            }
+        }
+        let commands = MPRemoteCommandCenter.shared()
+        remoteTargets.append(commands.playCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.resume() }; return .success })
+        remoteTargets.append(commands.pauseCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.pause() }; return .success })
+        remoteTargets.append(commands.togglePlayPauseCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.toggle() }; return .success })
+    }
+
+    func play(_ channel: Channel, url: URL, title: String?, preferredLanguage: String, alternates: [PlaybackAlternative] = []) {
+        if self.channel?.id != channel.id { previous = self.channel }
+        cancelPending(); recordingServer?.stop(); recordingServer = nil
+        self.channel = channel; currentURL = url; self.title = title; self.preferredLanguage = preferredLanguage
+        alternatives = Array(alternates.filter { $0.channel.id != channel.id }.prefix(2))
+        videoUnavailable = false; playbackNotice = nil
+        attempts = 0; errorMessage = nil
+        player.pause()
+        player.replaceCurrentItem(with: nil)
+        wantsPlayback = true
+        preparePlayback()
+    }
+    private func preparePlayback() {
+        let token = sessionID
+        isLoading = true; audioReady = false; hasVideoFrame = false
+        // Loading the asset and setting up audio are independent. Start the
+        // single player item now so network startup overlaps audio activation.
+        replaceItem()
+        preparationTask = Task {
+            do {
+                try await PlaybackAudioSession.shared.activate()
+                guard !Task.isCancelled, sessionID == token else { return }
+                preparationTask = nil
+                audioReady = true
+                if wantsPlayback { player.play(); startAvailableMedia() }
+            } catch {
+                guard !Task.isCancelled, sessionID == token else { return }
+                preparationTask = nil; isLoading = false
+                errorMessage = "Audio output could not be activated. Try again after other audio activity finishes."
+            }
+        }
+    }
+    private func replaceItem() {
+        guard let url = currentURL else { return }
+        clearItemObservers()
+        let item = AVPlayerItem(url: url)
+        applyQuality(to: item)
+        startedImmediately = false; hasVideoFrame = false
+        let token = sessionID
+        itemObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.sessionID == token, self.player.currentItem === item else { return }
+                if item.status == .failed { self.recover() }
+                if item.status == .readyToPlay {
+                    self.startAvailableMedia()
+                    self.watchForVideo(on: item, token: token)
+                    await self.selectAudio(on: item, token: token)
+                }
+            }
+        }
+        bufferObservation = item.observe(\.loadedTimeRanges, options: [.new]) { [weak self] item, _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.sessionID == token, self.player.currentItem === item else { return }
+                self.startAvailableMedia()
+            }
+        }
+        failedObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in Task { @MainActor [weak self] in if self?.sessionID == token, self?.player.currentItem === item { self?.recover() } } }
+        stalledObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.playbackStalledNotification, object: item, queue: .main) { [weak self] _ in Task { @MainActor [weak self] in if self?.sessionID == token, self?.player.currentItem === item { self?.waitForStallRecovery() } } }
+        player.replaceCurrentItem(with: item); isLoading = wantsPlayback
+        if audioReady && wantsPlayback { player.play() }
+        updateNowPlaying()
+    }
+    private func applyQuality(to item: AVPlayerItem? = nil) {
+        guard let item = item ?? player.currentItem else { return }
+        let preference: StreamQuality = supportsQualityPreference ? quality : .automatic
+        item.preferredPeakBitRate = preference.bitRate
+        item.preferredMaximumResolution = preference.resolution
+    }
+    private func startAvailableMedia() {
+        guard wantsPlayback, audioReady, !startedImmediately, let item = player.currentItem,
+              item.status == .readyToPlay, !item.isPlaybackBufferEmpty,
+              item.loadedTimeRanges.contains(where: { $0.timeRangeValue.duration.seconds > 0 }) else { return }
+        startedImmediately = true
+        bufferObservation = nil
+        // Start the first buffered media without waiting for AVPlayer's initial
+        // throughput estimate. Keep automatic buffering enabled for later stalls.
+        player.playImmediately(atRate: 1)
+    }
+    func videoDisplayChanged(_ ready: Bool, item: AVPlayerItem?) {
+        guard let item, player.currentItem === item else { return }
+        hasVideoFrame = ready
+        if ready { videoUnavailable = false; videoTask?.cancel(); videoTask = nil }
+    }
+    private func watchForVideo(on item: AVPlayerItem, token: UUID) {
+        guard videoTask == nil, !hasVideoFrame, !videoUnavailable else { return }
+        videoTask = Task {
+            var audibleSeconds = 0
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                guard sessionID == token, player.currentItem === item, wantsPlayback else { videoTask = nil; return }
+                if hasVideoFrame || item.presentationSize.width > 0 || player.isExternalPlaybackActive { videoTask = nil; return }
+                if player.timeControlStatus == .playing { audibleSeconds += 1 }
+                guard audibleSeconds >= 8 else { continue }
+                videoTask = nil
+                if !alternatives.isEmpty {
+                    let next = alternatives.removeFirst()
+                    let remaining = alternatives
+                    let originalPrevious = previous
+                    // Replace the old item before opening the next feed. Never
+                    // preflight several streams against a one-connection account.
+                    player.pause(); player.replaceCurrentItem(with: nil)
+                    play(next.channel, url: next.url, title: title, preferredLanguage: preferredLanguage, alternates: remaining)
+                    previous = originalPrevious
+                    playbackNotice = "Switched to another feed because the first supplied no video."
+                } else {
+                    videoUnavailable = true
+                    playbackNotice = "This feed has audio but no playable video. Choose another stream below."
+                }
+                return
+            }
+        }
+    }
+    private func waitForStallRecovery() {
+        guard wantsPlayback, stallTask == nil else { return }
+        isLoading = true
+        let token = sessionID, item = player.currentItem
+        stallTask = Task {
+            do { try await Task.sleep(for: .seconds(15)) } catch { return }
+            guard sessionID == token, wantsPlayback, player.currentItem === item else { return }
+            stallTask = nil
+            if player.timeControlStatus != .playing { recover() }
+        }
+    }
+    private func selectAudio(on item: AVPlayerItem, token: UUID) async {
+        guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible), sessionID == token, player.currentItem === item else { return }
+        if let option = group.options.first(where: { $0.extendedLanguageTag?.hasPrefix(preferredLanguage) == true || $0.locale?.language.languageCode?.identifier == preferredLanguage }) { item.select(option, in: group) }
+    }
+    private func recover() {
+        guard wantsPlayback, retryTask == nil, currentURL != nil else { return }
+        let failure = PlaybackFailure(error: player.currentItem?.error)
+        guard failure.shouldRetry, attempts < 3 else {
+            wantsPlayback = false; isLoading = false; isPlaying = false
+            player.pause()
+            errorMessage = failure.message; onFailure?(); return
+        }
+        isLoading = true
+        attempts += 1; let token = sessionID; let delay = attempts * 2
+        retryTask = Task {
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard !Task.isCancelled, sessionID == token, wantsPlayback else { return }
+            retryTask = nil; replaceItem()
+        }
+    }
+    func retry() { cancelPending(); attempts = 0; errorMessage = nil; videoUnavailable = false; playbackNotice = nil; wantsPlayback = true; preparePlayback() }
+    func toggle() { isPlaying ? pause() : resume() }
+    func pause() {
+        wantsPlayback = false
+        retryTask?.cancel(); retryTask = nil; stallTask?.cancel(); stallTask = nil
+        videoTask?.cancel(); videoTask = nil
+        player.pause(); isPlaying = false; isLoading = false; updateNowPlaying()
+    }
+    func resume() {
+        guard currentURL != nil else { return }
+        wantsPlayback = true
+        if player.currentItem?.status == .failed { retry(); return }
+        if audioReady { player.play(); startAvailableMedia(); if let item = player.currentItem { watchForVideo(on: item, token: sessionID) } }
+        else if preparationTask == nil { preparePlayback() }
+        updateNowPlaying()
+    }
+    func stop() {
+        cancelPending(); clearItemObservers(); player.replaceCurrentItem(with: nil)
+        recordingServer?.stop(); recordingServer = nil
+        channel = nil; currentURL = nil; isPlaying = false; isLoading = false; hasVideoFrame = false; wantsPlayback = false; audioReady = false; errorMessage = nil
+        alternatives = []; playbackNotice = nil; videoUnavailable = false
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+    }
+    private func cancelPending() { sessionID = UUID(); retryTask?.cancel(); retryTask = nil; preparationTask?.cancel(); preparationTask = nil; stallTask?.cancel(); stallTask = nil; videoTask?.cancel(); videoTask = nil }
+    private func clearItemObservers() {
+        videoTask?.cancel(); videoTask = nil
+        itemObservation = nil
+        bufferObservation = nil
+        if let failedObserver { NotificationCenter.default.removeObserver(failedObserver) }
+        if let stalledObserver { NotificationCenter.default.removeObserver(stalledObserver) }
+        failedObserver = nil; stalledObserver = nil
+    }
+    private func updateNowPlaying() {
+        guard let channel else { return }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = [MPMediaItemPropertyTitle: title ?? channel.name,
+            MPMediaItemPropertyArtist: channel.name, MPNowPlayingInfoPropertyIsLiveStream: recordingServer == nil,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0]
+    }
+    func playRecording(_ recording: RecordingItem) async throws {
+        stop()
+        let server = LocalRecordingServer(directory: RecordingController.directory.appending(path: recording.id.uuidString))
+        let url = try await server.start()
+        let channel = Channel(id: "recording.\(recording.id)", sourceID: recording.sourceID, name: recording.title)
+        play(channel, url: url, title: recording.title, preferredLanguage: preferredLanguage)
+        recordingServer = server
+        updateNowPlaying()
+    }
+}
+
+/// Audio routing can block. Serialize activation away from the UI thread.
+actor PlaybackAudioSession {
+    static let shared = PlaybackAudioSession()
+    func activate() throws {
+        let session = AVAudioSession.sharedInstance()
+        // Playback already supports AirPlay. Explicit allowAirPlay is only valid
+        // for the play-and-record category and causes an invalid-parameter error here.
+        if session.category != .playback || session.mode != .moviePlayback {
+            try session.setCategory(.playback, mode: .moviePlayback)
+        }
+        try session.setActive(true)
+    }
+}
+
+struct NativePlayerView: UIViewControllerRepresentable {
+    let player: AVPlayer
+    var controls = true
+    var onDisplayChange: ((Bool, AVPlayerItem?) -> Void)?
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        controller.player = player; controller.showsPlaybackControls = controls
+        controller.allowsPictureInPicturePlayback = true
+        controller.canStartPictureInPictureAutomaticallyFromInline = true
+        context.coordinator.onDisplayChange = onDisplayChange
+        context.coordinator.observation = controller.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak coordinator = context.coordinator] controller, _ in
+            Task { @MainActor [weak coordinator, weak controller] in
+                guard let controller else { return }
+                coordinator?.onDisplayChange?(controller.isReadyForDisplay, controller.player?.currentItem)
+            }
+        }
+        return controller
+    }
+    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        if controller.player !== player { controller.player = player }
+        controller.showsPlaybackControls = controls
+        context.coordinator.onDisplayChange = onDisplayChange
+    }
+    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) { coordinator.observation = nil; coordinator.onDisplayChange = nil; controller.player = nil }
+    final class Coordinator {
+        var observation: NSKeyValueObservation?
+        var onDisplayChange: ((Bool, AVPlayerItem?) -> Void)?
+    }
+}
