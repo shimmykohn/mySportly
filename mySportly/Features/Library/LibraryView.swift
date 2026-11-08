@@ -28,7 +28,7 @@ struct LibraryView: View {
                 }
             }
         }
-        .navigationTitle("Library")
+        .navigationTitle("My Stuff")
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your Library")
         .navigationDestination(item: $store.libraryRoute) { LibraryBookmarkDestination(item: $0) }
         .toolbar {

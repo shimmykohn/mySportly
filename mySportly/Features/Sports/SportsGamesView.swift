@@ -95,27 +95,3 @@ struct SportsGameView: View {
         [store.sources.first { $0.id == channel.sourceID }?.name ?? "", Locale.current.localizedString(forLanguageCode: store.language(channel)) ?? store.language(channel), channel.quality.isEmpty || channel.quality == "Auto" ? "" : "\(channel.quality) · provider label"].filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
-
-struct SportsDataStatusView: View {
-    @Environment(AppStore.self) private var store
-    var body: some View {
-        Form {
-            Section {
-                LabeledContent("Games", value: store.demo ? "Sample TV guide" : "Your TV guide")
-                LabeledContent("Team Names and Logos", value: store.demo ? "Sample directory" : "API-SPORTS")
-                if let updated = store.sportsData.updated { LabeledContent("Updated") { Text(updated, format: .dateTime.month().day().hour().minute()) } }
-                LabeledContent("Teams", value: store.sportsData.index.teams.count.formatted())
-                LabeledContent("Grouped Games", value: store.sportsData.index.games.count.formatted())
-                if let message = store.sportsData.message { Text(message).foregroundStyle(.secondary) }
-                if store.matchingGames { ProgressView("Matching your streams…") }
-                NavigationLink("TV Guide Status") { GuideStatusView() }
-            } header: { Text("Sports Data") } footer: { Text("Games use your saved guide, so missing listings stay unavailable. No live scores are provided. The team directory is included with the app; downloaded logos are kept on this device. Directory updates arrive with app updates.") }
-            if !store.sportsData.index.catalog.issues.isEmpty {
-                Section("Coverage") {
-                    ForEach(store.sportsData.index.catalog.issues.keys.sorted(), id: \.self) { name in LabeledContent(name, value: store.sportsData.index.catalog.issues[name] ?? "Unavailable") }
-                }
-            }
-            Section { Link("Data by API-SPORTS", destination: URL(string: "https://api-sports.io/")!) }
-        }.navigationTitle("Sports Data").navigationBarTitleDisplayMode(.inline)
-    }
-}

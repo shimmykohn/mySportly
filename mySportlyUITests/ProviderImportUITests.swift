@@ -69,7 +69,7 @@ final class ProviderImportUITests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["Done"].tap()
         app.selectMainTab("Guide")
-        XCTAssertTrue(app.buttons["Now"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Guide Time"].waitForExistence(timeout: 15))
         app.selectMainTab("Home")
     }
 
@@ -104,7 +104,7 @@ final class ProviderImportUITests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["Done"].tap()
         app.selectMainTab("Guide")
-        XCTAssertTrue(app.buttons["Now"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Guide Time"].waitForExistence(timeout: 15))
         app.selectMainTab("Home")
     }
 
@@ -152,7 +152,7 @@ final class ProviderImportUITests: XCTestCase {
         app.launch()
         app.waitForSavedCatalog(timeout: 60)
         app.selectMainTab("Guide")
-        XCTAssertTrue(app.buttons["Now"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Guide Time"].waitForExistence(timeout: 15))
         app.selectMainTab("Home")
     }
 

@@ -7,7 +7,7 @@ struct AISettingsView: View {
         Form {
             Section {
                 NavigationLink { LocaleSettingsView() } label: {
-                    LabeledContent("Languages and Regions", value: scopeLabel)
+                    LabeledContent("Region and Language", value: scopeLabel)
                 }
                 NavigationLink { AICategorySettingsView() } label: {
                     LabeledContent("Your Categories", value: "\(store.organizationPaths.count) choices")

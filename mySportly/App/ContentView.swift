@@ -8,7 +8,7 @@ struct ContentView: View {
         TabView(selection: $store.selectedTab) {
             Tab("Home", systemImage: "house", value: AppTab.home) { NavigationStack { HomeView() } }
             Tab("Guide", systemImage: "list.bullet.rectangle", value: AppTab.guide) { NavigationStack { GuideView() } }
-            Tab("My Stuff", systemImage: "square.stack", value: AppTab.myStuff) { NavigationStack { LibraryView().navigationTitle("My Stuff") } }
+            Tab("My Stuff", systemImage: "square.stack", value: AppTab.myStuff) { NavigationStack { LibraryView() } }
             Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) { NavigationStack { SearchScreen() } }
         }
         .tabViewStyle(.sidebarAdaptable)

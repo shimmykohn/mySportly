@@ -1,47 +1,20 @@
 import SwiftUI
-import AppIntents
 
 struct SettingsView: View {
     @Environment(AppStore.self) private var store
     var body: some View {
         Form {
-            Section("Your TV") {
+            Section {
                 NavigationLink { SourcesView() } label: { Label("Sources", systemImage: "antenna.radiowaves.left.and.right") }
-                NavigationLink { RefreshSettingsView() } label: { Label("Automatic Refresh", systemImage: "arrow.clockwise") }.accessibilityIdentifier("refresh-settings")
-                NavigationLink { LocaleSettingsView() } label: { Label("Languages and Regions", systemImage: "globe") }
-                NavigationLink { InterestsView() } label: { Label("Interests and Sports", systemImage: "heart") }
-                NavigationLink { SportsDataStatusView() } label: { Label("Sports Data", systemImage: "sportscourt") }
-                NavigationLink { DataOriginView() } label: { Label("Where Data Comes From", systemImage: "info.circle") }.accessibilityIdentifier("data-origin-settings")
-                Picker("Open To", selection: preference("preferences.startTab", fallback: "Live")) { ForEach(AppTab.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) } }
+                NavigationLink { LocaleSettingsView() } label: { Label("Region and Language", systemImage: "globe") }
                 Picker("Appearance", selection: preference("preferences.appearance", fallback: "System")) { ForEach(["System", "Light", "Dark"], id: \.self) { Text($0) } }
             }
-            Section { NavigationLink { AISettingsView() } label: { Label("AI", systemImage: "sparkles") }.accessibilityIdentifier("ai-settings") }
-            Section("Privacy and iCloud") {
+            Section("iCloud") {
                 Toggle("Sync Personal Choices", isOn: Binding(get: { store.personal.cloudRequested }, set: { store.personal.requestCloudSync($0) }))
-                if store.personal.syncChangeNeedsRelaunch { Label("This change takes effect the next time you close and reopen the app.", systemImage: "info.circle").font(.footnote) }
+                if store.personal.syncChangeNeedsRelaunch { Label("Takes effect the next time you open the app.", systemImage: "info.circle").font(.footnote) }
                 Text(store.personal.cloudStatus).foregroundStyle(.secondary)
-                Button("Check iCloud Status", systemImage: "arrow.clockwise") {
-                    Task {
-                        let revision = store.personal.revision
-                        await store.personal.refreshCloudStatus()
-                        if store.catalogReady && store.personal.revision != revision { store.rebuild() }
-                    }
-                }
-                Toggle("Use Viewing History", isOn: preference("preferences.history", fallback: true))
-                Button("Clear Viewing History", role: .destructive) { store.clearHistory() }
-                Text("Library saves, favorites, settings, and corrections use your private iCloud store when enabled. Source credentials use iCloud Keychain. Turning sync off keeps local data and previously synced iCloud copies. New credentials then stay on this device. Catalog caches are encrypted here. Recording files stay local.").font(.footnote).foregroundStyle(.secondary)
             }
-            Section("Siri and Shortcuts") {
-                ShortcutsLink()
-                Text("Play a channel, search TV, open a saved item, save a channel, refresh sources, or open the guide. Siri search uses your actual lineup and guide.").font(.footnote).foregroundStyle(.secondary)
-            }
-            Section("Storage") {
-                LabeledContent("Channels", value: store.channels.count.formatted())
-                LabeledContent("Guide Programs", value: store.catalog.programs.count.formatted())
-                LabeledContent("Recordings", value: ByteCountFormatter.string(fromByteCount: store.recorder.totalBytes, countStyle: .file))
-                NavigationLink("Manage Recordings") { RecordingsView() }
-            }
-            Section { LabeledContent("mySportly", value: "1.0 · iPhone & iPad") }
+            Section { NavigationLink { AISettingsView() } label: { Label("AI", systemImage: "sparkles") }.accessibilityIdentifier("ai-settings") }
         }
         .navigationTitle("Settings")
     }
@@ -82,7 +55,7 @@ struct LocaleSettingsView: View {
                 Text("Translation changes the description only. Audio and captions depend on the stream.").font(.footnote).foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("Languages and Regions").toolbar { EditButton() }
+        .navigationTitle("Region and Language").toolbar { EditButton() }
         .sheet(isPresented: $addLanguage) { CodePicker(title: "Add Language", codes: Locale.LanguageCode.isoLanguageCodes.map(\.identifier), label: { Locale.current.localizedString(forLanguageCode: $0) ?? $0 }) { code in if !store.languages.contains(code) { store.set("preferences.languages", store.languages + [code]) } } }
         .sheet(isPresented: $addRegion) { CodePicker(title: "Add Region", codes: Locale.Region.isoRegions.map(\.identifier), label: { Locale.current.localizedString(forRegionCode: $0) ?? $0 }) { code in if !store.regions.contains(code) { store.set("preferences.regions", store.regions + [code]) } } }
     }

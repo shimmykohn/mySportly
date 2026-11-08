@@ -12,7 +12,7 @@ struct SetupView: View {
                     Text("Connect your source, choose what matters to you, and turn a crowded catalog into your own lineup.")
                 }
                 Section("Make It Yours") {
-                    NavigationLink { LocaleSettingsView() } label: { Label("Languages and Regions", systemImage: "globe") }
+                    NavigationLink { LocaleSettingsView() } label: { Label("Region and Language", systemImage: "globe") }
                     NavigationLink { InterestsView() } label: { Label("Interests", systemImage: "heart") }
                     Text("Suggested from this device. Change these any time; channels outside your preferences stay available.").font(.footnote).foregroundStyle(.secondary)
                 }

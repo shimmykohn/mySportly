@@ -25,7 +25,7 @@ final class mySportlyUITests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["Done"].tap()
         app.selectMainTab("Guide")
-        XCTAssertTrue(app.buttons["Now"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Guide Time"].waitForExistence(timeout: 5))
         capture("Guide", app: app)
         app.selectMainTab("My Stuff")
         XCTAssertTrue(app.navigationBars["My Stuff"].waitForExistence(timeout: 5))
