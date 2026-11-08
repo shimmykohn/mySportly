@@ -127,6 +127,7 @@ import Testing
         #expect(store.importingSource == nil)
 
         store.loading = false
+        store.catalogReady = true
         store.notice = nil
         await store.restoreMissingSources()
         #expect(store.notice?.title == "Couldn’t connect", "A genuinely missing source must still be restored after loading.")

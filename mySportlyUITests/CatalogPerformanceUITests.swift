@@ -73,10 +73,6 @@ import UIKit
         let ready = NSPredicate { _, _ in preview.value as? String == "Video ready" }
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: ready, evaluatedWith: nil)], timeout: 35), .completed)
         capture("Native player first video frame", app: app)
-        app.buttons["Change Channel"].tap()
-        XCTAssertTrue(app.navigationBars["Choose Channel"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.searchFields.firstMatch.exists)
-        app.buttons["Cancel"].tap()
         app.buttons["close-player"].tap()
         app.buttons["Stop"].firstMatch.tap()
     }

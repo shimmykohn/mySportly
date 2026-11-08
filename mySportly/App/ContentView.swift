@@ -3,6 +3,7 @@ import AppIntents
 
 struct ContentView: View {
     @Environment(AppStore.self) private var store
+    @Namespace private var playerNamespace
     var body: some View {
         @Bindable var store = store
         TabView(selection: $store.selectedTab) {
@@ -14,9 +15,12 @@ struct ContentView: View {
         .tabViewStyle(.sidebarAdaptable)
         .scrollEdgeEffectStyle(.soft, for: .top)
         .tabViewBottomAccessory(isEnabled: store.playback.channel != nil) { CompactPlayer() }
+        .environment(\.playerNamespace, playerNamespace)
         .sheet(isPresented: $store.showSetup) { SetupView().scrollEdgeEffectStyle(.soft, for: .top).interactiveDismissDisabled(store.sources.isEmpty && !store.demo) }
         .sheet(isPresented: $store.showSettings) { NavigationStack { SettingsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { store.showSettings = false } } } }.scrollEdgeEffectStyle(.soft, for: .top) }
-        .sheet(isPresented: $store.showPlayer) { PlayerScreen().scrollEdgeEffectStyle(.soft, for: .top).presentationDragIndicator(.visible) }
+        .fullScreenCover(isPresented: $store.showPlayer) {
+            PlayerScreen().navigationTransition(.zoom(sourceID: store.playerSourceID ?? "player.accessory", in: playerNamespace))
+        }
         .fullScreenCover(isPresented: $store.showMultiview) { MultiviewScreen().scrollEdgeEffectStyle(.soft, for: .top) }
         .alert(store.notice?.title ?? "mySportly", isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } }), presenting: store.notice) { _ in Button("OK", role: .cancel) { store.notice = nil } } message: { Text($0.message) }
         .overlay { if store.loading && store.selectedTab != .home { ProgressView("Opening your saved lineup…").padding().background(.background, in: .rect(cornerRadius: 12)).accessibilityIdentifier("catalog-loading") } }
@@ -50,7 +54,8 @@ struct PlayableChannelRow: View {
     var canRemoveFromHistory = false
     @State private var details = false
     var body: some View {
-        Button { store.play(channel) } label: { ChannelRow(channel: channel).contentShape(.rect) }
+        Button { store.play(channel, source: "channel.\(channel.id)") } label: { ChannelRow(channel: channel).contentShape(.rect) }
+            .playerSource("channel.\(channel.id)")
             .buttonStyle(.plain)
             .accessibilityIdentifier("\(canRemoveFromHistory ? "recent" : "play")-channel-\(channel.id)")
             .accessibilityHint("Plays this channel")

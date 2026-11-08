@@ -13,6 +13,7 @@ struct HomeHeroPager: View {
                     case .channel(let channel): HeroChannelPage(item: channel)
                     }
                 }
+                .playerSource("hero.\(item.id)")
                 .padding(.horizontal)
                 .padding(.bottom, items.count > 1 ? 36 : 0)
             }
@@ -67,7 +68,7 @@ struct HeroGamePage: View {
             if let league = store.homeSports.leagues[game.game.leagueID] { Text(league.name).font(.subheadline).opacity(0.85) }
         } actions: {
             if game.state == .live {
-                Button("Watch", systemImage: "play.fill") { store.watchGame(game.game) }
+                Button("Watch", systemImage: "play.fill") { store.watchGame(game.game, source: "hero.\(game.id)") }
                     .buttonStyle(.glassProminent)
                     .accessibilityIdentifier("home-hero-watch")
             }
@@ -106,7 +107,7 @@ struct HeroChannelPage: View {
                 Text(store.name(channel)).font(.subheadline).opacity(0.85)
                 Text(item.program?.title ?? store.name(channel)).font(.title2.bold()).lineLimit(2)
             } actions: {
-                Button("Watch", systemImage: "play.fill") { store.play(channel) }
+                Button("Watch", systemImage: "play.fill") { store.play(channel, source: "hero.channel.\(channel.id)") }
                     .buttonStyle(.glassProminent)
                     .accessibilityIdentifier("home-hero-watch")
                 Button(favorite ? "Favorited" : "Favorite", systemImage: favorite ? "heart.fill" : "heart") { store.toggle(channel, "favorite") }

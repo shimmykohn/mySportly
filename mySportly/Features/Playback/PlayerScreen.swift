@@ -1,97 +1,125 @@
 import SwiftUI
 import AVKit
 
+/// The mini player in the tab bar accessory.
 struct CompactPlayer: View {
     @Environment(AppStore.self) private var store
     var body: some View {
         if let channel = store.playback.channel {
             HStack(spacing: 12) {
-                Button { store.showPlayer = true } label: {
-                    HStack { Image(systemName: "play.tv"); VStack(alignment: .leading) { Text(store.name(channel)).font(.subheadline.bold()).lineLimit(1); if store.playback.isLoading { Text("Connecting…").font(.caption).foregroundStyle(.secondary) } } }.frame(maxWidth: .infinity, alignment: .leading)
-                }.buttonStyle(.plain).accessibilityLabel("Open player for \(store.name(channel))")
-                Button(store.playback.isPlaying ? "Pause" : "Play", systemImage: store.playback.isPlaying ? "pause.fill" : "play.fill") { store.playback.toggle() }.labelStyle(.iconOnly)
-                Button("Stop", systemImage: "xmark") { store.playback.stop() }.labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.primary)
-            }.padding(.horizontal)
+                Button { store.playerSourceID = nil; store.showPlayer = true } label: {
+                    HStack(spacing: 10) {
+                        ChannelLogo(url: channel.logo).frame(width: 34, height: 34)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(store.playerTitle).font(.subheadline.weight(.semibold)).lineLimit(1)
+                            Text(store.playback.isLoading ? "Connecting…" : store.name(channel)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .playerSource("player.accessory")
+                .accessibilityLabel("Open player for \(store.name(channel))")
+                Button(store.playback.isPlaying ? "Pause" : "Play", systemImage: store.playback.isPlaying ? "pause.fill" : "play.fill") { store.playback.toggle() }
+                    .labelStyle(.iconOnly)
+                Button("Stop", systemImage: "xmark") { store.playback.stop() }
+                    .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.primary)
+            }
+            .padding(.horizontal)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("compact-player")
         }
     }
 }
 
+/// Full-screen player: just the video and its controls. Swipe down to
+/// minimize; landscape on iPhone shows only the video.
 struct PlayerScreen: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
-    @State private var channels = false
-    @State private var showRecordAlert = false
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
     var body: some View {
-        NavigationStack {
+        let video = NativePlayerView(player: store.playback.player, onDisplayChange: store.playback.videoDisplayChanged)
+            .accessibilityLabel("Native video player")
+            .accessibilityIdentifier("stream-preview")
+            .accessibilityValue(store.playback.hasVideoFrame ? "Video ready" : "Waiting for video")
+        if verticalSizeClass == .compact {
+            video.ignoresSafeArea().background(.black)
+        } else {
             VStack(spacing: 0) {
-                // Keep one native player mounted as soon as the sheet opens.
-                // The native progress row never replaces the video surface.
-                NativePlayerView(player: store.playback.player, onDisplayChange: store.playback.videoDisplayChanged)
+                HStack {
+                    Button("Minimize", systemImage: "chevron.down") { dismiss() }
+                        .labelStyle(.iconOnly).font(.title3.weight(.semibold))
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("close-player")
+                    Spacer()
+                }
+                .padding(.horizontal).padding(.bottom, 10)
+                video
                     .aspectRatio(16 / 9, contentMode: .fit)
-                    .frame(maxHeight: 360)
                     .frame(maxWidth: .infinity)
                     .background(.black)
-                    .accessibilityLabel("Native video player")
-                    .accessibilityIdentifier("stream-preview")
-                    .accessibilityValue(store.playback.hasVideoFrame ? "Video ready" : "Waiting for video")
-                List {
-                    Section {
-                        if store.playback.isLoading { ProgressView(store.playback.hasVideoFrame ? "Buffering…" : "Connecting to stream…") }
-                        else if store.playback.isPlaying && !store.playback.hasVideoFrame && !store.playback.videoUnavailable { ProgressView("Waiting for video…") }
-                        if let notice = store.playback.playbackNotice { Label(notice, systemImage: "info.circle").font(.subheadline).foregroundStyle(.secondary) }
-                        if let channel = store.playback.channel {
-                            Text(store.name(channel)).font(.title2.bold())
-                            if let program = store.now(on: channel) { NavigationLink { ProgramDetailView(program: program, channel: channel) } label: { ProgramRow(program: program) } }
-                        }
-                        if let error = store.playback.errorMessage { Text(error).foregroundStyle(.secondary); Button("Try Again", systemImage: "arrow.clockwise") { store.playback.retry() } }
-                    }
-                    Section("Playback") {
-                        Button("Previous Channel", systemImage: "backward.end") { store.previousChannel() }.disabled(store.playback.previous == nil)
-                        Button("Change Channel", systemImage: "list.bullet") { channels = true }
-                        NativeStreamPickers()
-                        if let channel = store.playback.channel { NavigationLink("Channel Details") { ChannelDetailView(channel: channel) } }
-                        Text("Use the player’s system controls for full screen, captions, audio tracks, picture in picture, and AirPlay when available.").font(.footnote).foregroundStyle(.secondary)
-                    }
-                    Section("Recording") {
-                        if let recording = store.recorder.active {
-                            Label("Recording \(recording.channelName)", systemImage: "record.circle")
-                            Text("\(Duration.seconds(recording.duration).formatted(.time(pattern: .hourMinuteSecond))) · \(ByteCountFormatter.string(fromByteCount: recording.bytes, countStyle: .file))").monospacedDigit()
-                            Button("Stop Recording", role: .destructive) { Task { await store.recorder.stop() } }
-                        } else { Button("Record on This Device", systemImage: "record.circle") { showRecordAlert = true }.disabled(store.playback.channel == nil || store.playback.channel?.id.hasPrefix("recording.") == true) }
-                        if let error = store.recorder.errorMessage { Text(error).font(.footnote).foregroundStyle(.secondary) }
-                    }
-                }.accessibilityIdentifier("player-details")
+                PlayerDetails().padding(.horizontal, 20).padding(.top, 22)
+                Spacer(minLength: 0)
             }
-            .navigationTitle("Now Playing").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close", systemImage: "xmark") { dismiss() }
-                        .labelStyle(.iconOnly).tint(.primary)
-                        .accessibilityIdentifier("close-player")
-                }
-            }
-            .sheet(isPresented: $channels) { NavigationStack { ChannelChooser { channel in store.play(channel); channels = false } } }
-            .confirmationDialog("Start recording?", isPresented: $showRecordAlert, titleVisibility: .visible) { Button("Start Recording") { Task { await store.startRecording() } } } message: { Text("Keep the app in the foreground. This uses an additional provider connection and device storage. Supported unencrypted HLS streams can be recorded.") }
         }
     }
 }
 
-struct NativeStreamPickers: View {
+private struct PlayerDetails: View {
     @Environment(AppStore.self) private var store
+
     var body: some View {
-        let feeds = store.playerFeeds
-        if !feeds.isEmpty {
-            Picker("Stream", selection: Binding(get: { store.playback.channel?.id ?? "" }, set: { store.selectPlayerFeed($0) })) {
-                ForEach(feeds) { channel in Text(store.name(channel)).tag(channel.id) }
-            }.pickerStyle(.menu).accessibilityIdentifier("player-stream-picker")
-        }
-        if store.playback.supportsQualityPreference {
-            Picker("Quality", selection: Binding(get: { store.playback.quality }, set: {
-                store.playback.quality = $0; store.set("preferences.streamQuality", $0.rawValue)
-            })) {
-                ForEach(StreamQuality.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.menu).accessibilityIdentifier("player-quality-picker")
-            Text("Quality is a preference for adaptive streams. Available resolutions depend on the feed.").font(.caption).foregroundStyle(.secondary)
+        let playback = store.playback
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(store.playerTitle).font(.title2.bold()).lineLimit(2)
+                        .accessibilityIdentifier("player-title")
+                        .accessibilityValue(Text(verbatim: playback.channel?.id ?? ""))
+                    if !store.playerSubtitle.isEmpty { Text(store.playerSubtitle).font(.subheadline).foregroundStyle(.secondary) }
+                }
+                Spacer()
+                if let channel = playback.channel {
+                    let favorite = store.flag(channel, "favorite")
+                    Button(favorite ? "Remove Favorite" : "Favorite", systemImage: favorite ? "heart.fill" : "heart") { store.toggle(channel, "favorite") }
+                        .labelStyle(.iconOnly).font(.title2).tint(favorite ? .pink : .secondary)
+                        .accessibilityIdentifier("player-favorite")
+                }
+            }
+            if let error = playback.errorMessage {
+                HStack {
+                    Text(error).font(.subheadline).foregroundStyle(.secondary)
+                    Button("Try Again") { playback.retry() }
+                }
+            } else if playback.isLoading {
+                Text(playback.hasVideoFrame ? "Buffering…" : "Connecting…").font(.subheadline).foregroundStyle(.secondary)
+            } else if let notice = playback.playbackNotice {
+                Text(notice).font(.subheadline).foregroundStyle(.secondary)
+            }
+            if let channel = playback.channel, let program = store.now(on: channel) {
+                VStack(spacing: 4) {
+                    ProgressView(value: min(1, max(0, store.clock.timeIntervalSince(program.start) / program.end.timeIntervalSince(program.start))))
+                    HStack {
+                        Text(program.start, format: .dateTime.hour().minute())
+                        Spacer()
+                        Text(program.end, format: .dateTime.hour().minute())
+                    }
+                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                }
+                .accessibilityElement(children: .combine)
+            }
+            HStack(spacing: 44) {
+                Button("Previous Channel", systemImage: "backward.fill") { store.stepChannel(by: -1) }
+                Button(playback.isPlaying ? "Pause" : "Play", systemImage: playback.isPlaying ? "pause.fill" : "play.fill") { playback.toggle() }
+                    .font(.largeTitle)
+                Button("Next Channel", systemImage: "forward.fill") { store.stepChannel(by: 1) }
+            }
+            .labelStyle(.iconOnly).font(.title).tint(.primary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 6)
         }
     }
 }

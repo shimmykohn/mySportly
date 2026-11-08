@@ -19,16 +19,6 @@ import UIKit
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         waitForVideo(preview)
         capture("Home game - first video frame")
-        let picker = app.buttons["player-stream-picker"]
-        reveal(picker, app: app); picker.tap()
-        app.buttons["Sample Sports Alternate HD"].tap()
-        waitForVideo(preview)
-        XCTAssertTrue(picker.label.contains("Alternate") || (picker.value as? String)?.contains("Alternate") == true)
-        let quality = app.buttons["player-quality-picker"]
-        reveal(quality, app: app); quality.tap()
-        app.buttons["Up to 720p"].tap()
-        XCTAssertTrue(quality.label.contains("720p") || (quality.value as? String)?.contains("720p") == true)
-        capture("Player - native feed and quality controls")
         app.buttons["close-player"].tap()
         app.buttons["Stop"].firstMatch.tap()
         // The same game is reachable from the team's page in My Stuff.

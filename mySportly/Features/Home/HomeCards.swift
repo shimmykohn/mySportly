@@ -9,7 +9,8 @@ struct HomeGameCard: View {
         let away = teams[game.game.awayID], home = teams[game.game.homeID]
         Group {
             if game.state == .live {
-                Button { store.watchGame(game.game) } label: { card(away: away, home: home) }
+                Button { store.watchGame(game.game, source: "game.\(game.id)") } label: { card(away: away, home: home) }
+                    .playerSource("game.\(game.id)")
             } else {
                 NavigationLink { SportsGameView(gameID: game.id) } label: { card(away: away, home: home) }
             }
@@ -61,7 +62,7 @@ struct HomeChannelCard: View {
     let program: GuideProgram?
 
     var body: some View {
-        Button { store.play(channel) } label: {
+        Button { store.play(channel, source: "channel.\(channel.id)") } label: {
             VStack(alignment: .leading, spacing: 8) {
                 ChannelLogo(url: channel.logo)
                     .frame(width: 150, height: 84)
@@ -73,6 +74,7 @@ struct HomeChannelCard: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .playerSource("channel.\(channel.id)")
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("home-channel-\(channel.id)")
         .contextMenu {

@@ -65,13 +65,16 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private(set) var playbackAlternatives: [String: [String]] = [:]
     var selectedTab: AppTab = .home
     var showPlayer = false
+    /// The tapped item the player zooms out of; nil uses the mini player.
+    var playerSourceID: String?
     var showSettings = false
     var showSetup = false
     var showMultiview = false
     var notice: AppNotice?
     var loading = true
     /// True once the full saved catalog has been prepared at least once.
-    private(set) var catalogReady = false
+    // Settable by tests; the app sets it only after the full catalog is prepared.
+    var catalogReady = false
     private(set) var routingReady = false
     var clock = Date.now
     private(set) var importProgress: SourceImportProgress?
@@ -674,7 +677,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         } catch { inform("Source removal", safeError(error)) }
     }
 
-    func play(_ channel: Channel, program: GuideProgram? = nil, gameID: String? = nil, explicitFeed: Bool = false) {
+    func play(_ channel: Channel, program: GuideProgram? = nil, gameID: String? = nil, explicitFeed: Bool = false, source zoomSource: String? = nil) {
         do {
             let preferred: String = personal.value(key(channel, "preferredVariant"), default: channel.id)
             let chosen = program == nil && !explicitFeed ? (channelIndex[preferred] ?? channel) : channel
@@ -691,8 +694,35 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             activeSportsGameID = gameID
             playback.play(chosen, url: url, title: program?.title ?? now(on: chosen)?.title, preferredLanguage: personal.value("preferences.audioLanguage", default: languages.first ?? "en"), alternates: alternates)
             if usesHistory { try personal.set("history.\(chosen.id)", Date.now) }
+            if !showPlayer { playerSourceID = zoomSource }
             showPlayer = true
         } catch { inform("Playback unavailable", safeError(error)) }
+    }
+    /// Previous or next channel: through favorites when the playing channel is
+    /// one of at least two, otherwise through the lineup.
+    func stepChannel(by offset: Int) {
+        let current = playback.channel
+        let list = favorites.count > 1 && current.map { flag($0, "favorite") } == true ? favorites : lineup
+        guard let id = ChannelStepping.neighbor(of: current?.id, in: list.map(\.id), offset: offset), let channel = channelIndex[id] else { return }
+        play(channel)
+    }
+    /// The player's title: the game, else the current program, else the channel.
+    var playerTitle: String {
+        guard let channel = playback.channel else { return "" }
+        if let gameID = activeSportsGameID, let game = game(gameID) {
+            let teams = sportsData.index.teams.isEmpty ? homeSports.teams : sportsData.index.teams
+            if let away = teams[game.awayID] ?? homeSports.teams[game.awayID], let home = teams[game.homeID] ?? homeSports.teams[game.homeID] {
+                return "\(away.libraryItem.name) at \(home.libraryItem.name)"
+            }
+        }
+        return now(on: channel)?.title ?? name(channel)
+    }
+    /// "Channel · League" for games, else the channel name when the title is a program.
+    var playerSubtitle: String {
+        guard let channel = playback.channel else { return "" }
+        let league = activeSportsGameID.flatMap { game($0) }.flatMap { sportsData.index.leagues[$0.leagueID] ?? homeSports.leagues[$0.leagueID] }?.name
+        let title = playerTitle
+        return [title == name(channel) ? nil : name(channel), league].compactMap { $0 }.joined(separator: " · ")
     }
     func previousChannel() { if let previous = playback.previous, let channel = channelIndex[previous.id] { play(channel) } }
     func variants(of channel: Channel) -> [Channel] {
@@ -739,7 +769,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     }
     /// A matched game, or one restored from the launch snapshot.
     func game(_ id: String) -> SportsGame? { sportsData.index.games[id] ?? homeSports.games.first { $0.id == id } }
-    func watchGame(_ game: SportsGame, feed: Channel? = nil) {
+    func watchGame(_ game: SportsGame, feed: Channel? = nil, source: String? = nil) {
         let available = feeds(for: game.id, playableOnly: true)
         if let feed, !available.contains(where: { $0.id == feed.id }) {
             inform("Stream unavailable", "This stream is no longer matched to this game. Choose another stream."); return
@@ -749,7 +779,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             inform("No stream available now", "This game has no current matching feed in your lineup."); return
         }
         if let feed { set("sports.feed.\(game.id)", feed.id) }
-        play(chosen, gameID: game.id, explicitFeed: true)
+        play(chosen, gameID: game.id, explicitFeed: true, source: source)
     }
     var playerFeeds: [Channel] {
         guard let channel = playback.channel else { return [] }
