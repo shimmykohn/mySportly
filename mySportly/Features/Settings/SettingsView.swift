@@ -24,7 +24,7 @@ struct SettingsView: View {
                     Task {
                         let revision = store.personal.revision
                         await store.personal.refreshCloudStatus()
-                        if !store.loading && store.personal.revision != revision { store.rebuild() }
+                        if store.catalogReady && store.personal.revision != revision { store.rebuild() }
                     }
                 }
                 Toggle("Use Viewing History", isOn: preference("preferences.history", fallback: true))

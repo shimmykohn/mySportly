@@ -37,7 +37,7 @@ enum AppRouteInbox {
     static let notification = Notification.Name("mySportly.route")
     @MainActor static func queue(_ url: URL) { UserDefaults.standard.set(url.absoluteString, forKey: "pendingRoute"); NotificationCenter.default.post(name: notification, object: nil) }
     @MainActor static func consume(using store: AppStore) {
-        guard !store.loading, store.routingReady, let text = UserDefaults.standard.string(forKey: "pendingRoute"), let url = URL(string: text) else { return }
+        guard store.catalogReady, store.routingReady, let text = UserDefaults.standard.string(forKey: "pendingRoute"), let url = URL(string: text) else { return }
         UserDefaults.standard.removeObject(forKey: "pendingRoute"); store.route(url)
     }
 }

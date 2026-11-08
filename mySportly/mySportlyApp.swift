@@ -22,7 +22,7 @@ import Combine
                     if phase == .active {
                         store.clock = .now
                         Task {
-                            guard !store.loading else { return }
+                            guard store.catalogReady else { return }
                             store.matchSportsGames()
                             let revision = store.personal.revision
                             await store.personal.refreshCloudStatus()
@@ -39,7 +39,7 @@ import Combine
                 .onChange(of: store.sources) { _, _ in store.scheduleSourceRefresh() }
                 .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { date in if phase == .active { store.clock = date } }
                 .onReceive(NotificationCenter.default.publisher(for: .NSPersistentStoreRemoteChange).receive(on: DispatchQueue.main)) { _ in
-                    if store.personal.reload(), !store.loading {
+                    if store.personal.reload(), store.catalogReady {
                         store.rebuild()
                         Task { await store.restoreMissingSources() }
                     }

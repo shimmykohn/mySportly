@@ -43,6 +43,8 @@ struct LiveView: View {
                 }
             }
         }
+        .accessibilityIdentifier("home-root")
+        .accessibilityValue("launch-ms=\(store.launchTimeline.milliseconds(to: .firstInteractive) ?? -1)")
         .navigationTitle("").navigationBarTitleDisplayMode(.inline).appToolbar()
         .toolbar {
             ToolbarItem(placement: .principal) { LiveLoadingIndicator(browser: browser) }

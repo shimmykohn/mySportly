@@ -68,6 +68,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     var showMultiview = false
     var notice: AppNotice?
     var loading = true
+    /// True once the full saved catalog has been prepared at least once.
+    private(set) var catalogReady = false
     private(set) var routingReady = false
     var clock = Date.now
     private(set) var importProgress: SourceImportProgress?
@@ -189,31 +191,42 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
 
     func load() async {
         guard !loaded else { return }; loaded = true
-        if ProcessInfo.processInfo.arguments.contains("--demo") { await loadDemo(); loading = false; routingReady = true; AppRouteInbox.consume(using: self); return }
+        if ProcessInfo.processInfo.arguments.contains("--demo") { await loadDemo(); loading = false; catalogReady = true; routingReady = true; AppRouteInbox.consume(using: self); return }
         #if DEBUG
         do {
             if try intelligence.importDevelopmentCredential() { try personal.set("preferences.cloudAI", true) }
         } catch { inform("Jev setup", "The key could not be saved in this device’s Keychain.") }
         #endif
         Task { await sportsData.load() }
+        // First frame: the small launch snapshot. The full catalog, cloud
+        // status and network work all follow once Home is interactive.
+        let snapshotRead = launchSignposter.beginInterval("snapshot")
+        let snapshot = await cache.loadLaunchSnapshot()?.active(sources: Set(sources.map(\.id)), now: .now)
+        launchSignposter.endInterval("snapshot", snapshotRead)
+        if let snapshot, !snapshot.channels.isEmpty {
+            apply(snapshot)
+            launchTimeline.mark(.snapshotLoaded)
+            showFirstFrame()
+        }
         let catalogLoad = launchSignposter.beginInterval("catalogLoad")
         do { catalog = try await cache.load(); catalog.pruneGuide(now: .now) }
         catch { inform("Saved catalog unavailable", "Your personal choices are safe. Refresh your sources to restore the local catalog.") }
         launchSignposter.endInterval("catalogLoad", catalogLoad)
         launchTimeline.mark(.catalogDecoded)
-        let restoreState = launchSignposter.beginInterval("restoreState")
-        await reminders.reload(); await recorder.reload()
-        await personal.refreshCloudStatus()
-        await organization.restore()
-        launchSignposter.endInterval("restoreState", restoreState)
         let prepare = launchSignposter.beginInterval("prepare")
         rebuild(force: true)
         await waitForCatalog()
         launchSignposter.endInterval("prepare", prepare)
-        loading = false
-        launchTimeline.mark(.firstInteractive)
+        catalogReady = true
+        showFirstFrame()
+        let restoreState = launchSignposter.beginInterval("restoreState")
+        await reminders.reload(); await recorder.reload()
+        let revision = personal.revision
+        await personal.refreshCloudStatus()
+        await organization.restore()
+        if personal.revision != revision { rebuild() }
+        launchSignposter.endInterval("restoreState", restoreState)
         updateIntentCatalog()
-        showSetup = !personal.value("setup.complete", default: false)
         await restoreMissingSources()
         routingReady = true
         AppRouteInbox.consume(using: self)
@@ -222,6 +235,36 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         #endif
         if backgroundRefresh.registered && UIApplication.shared.applicationState == .active && !ProcessInfo.processInfo.arguments.contains("--group-audit") {
             Task { await self.refreshDueSources() }
+        }
+    }
+
+    private func showFirstFrame() {
+        guard loading else { return }
+        loading = false
+        showSetup = !personal.value("setup.complete", default: false)
+        launchTimeline.mark(.firstInteractive)
+    }
+
+    /// Fills the published lineup from the launch snapshot until the full
+    /// prepared catalog replaces it.
+    private func apply(_ snapshot: LaunchSnapshot) {
+        let byID = Dictionary(snapshot.channels.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        channels = snapshot.channels
+        channelIndex = byID
+        lineup = snapshot.lineupIDs.compactMap { byID[$0] }
+        favorites = snapshot.favoriteIDs.compactMap { byID[$0] }
+        guideIndex = snapshot.guide
+        guideMatches = snapshot.guideMatches
+    }
+
+    /// Search before the full index exists: snapshot channels whose display
+    /// name contains every keyword, in lineup order.
+    func snapshotMatches(_ keywords: [String]) -> [CatalogMatch] {
+        guard !keywords.isEmpty else { return [] }
+        return channels.compactMap { channel in
+            let display = name(channel)
+            let hit = keywords.allSatisfy { display.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+            return hit ? CatalogMatch(channel: channel, name: display, program: now(on: channel)) : nil
         }
     }
 
@@ -537,7 +580,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func restoreMissingSources() async {
         // Scene activation can arrive while load() is still decrypting the cache.
         // Empty in-memory channels at that point do not mean a source is missing.
-        guard !loading, !demo else { return }
+        guard catalogReady, !demo else { return }
         await waitForCatalog()
         for source in sources where !channels.contains(where: { $0.sourceID == source.id }) && !attemptedRestores.contains(source.id) {
             guard importTask == nil, (try? KeychainStore.credentials(source.id)) != nil else { continue }
@@ -902,7 +945,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         }
     }
     func updateIntentCatalog() {
-        guard let directory, !loading else { return }
+        guard let directory, catalogReady else { return }
         intentCatalogTask?.cancel()
         let library = savedLibraryItems, audience = organizationAudience
         intentCatalogTask = Task {
@@ -965,7 +1008,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         backgroundRefresh.schedule(at: dates.min())
     }
     @discardableResult func refreshDueSources(force: Bool = false) async -> Bool {
-        guard !loading, !demo, !refreshBatchRunning, importTask == nil, !Task.isCancelled else { return false }
+        guard catalogReady, !demo, !refreshBatchRunning, importTask == nil, !Task.isCancelled else { return false }
         refreshBatchRunning = true
         refreshMessage = nil
         defer { refreshBatchRunning = false; scheduleSourceRefresh() }

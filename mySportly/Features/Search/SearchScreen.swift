@@ -78,7 +78,13 @@ struct SearchScreen: View {
             return
         }
         busy = true; interpreting = usingAI
-        guard let index = store.queryIndex else { status = "Preparing your saved lineup for search…"; return }
+        guard let index = store.queryIndex else {
+            // The full index is still preparing: answer from the launch lineup.
+            results = store.snapshotMatches(request.split(separator: " ").map(String.init))
+            busy = false; interpreting = false
+            status = "Keyword matches from your channels and guide."
+            return
+        }
         searchTask = Task {
             do {
                 if !usingAI { try await Task.sleep(for: .milliseconds(250)) }

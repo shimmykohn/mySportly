@@ -14,7 +14,7 @@ import UIKit
                 guard let store else { task.setTaskCompleted(success: false); return }
                 let work = Task { @MainActor in
                     await store.load()
-                    while store.loading && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(100)) }
+                    while !store.catalogReady && !Task.isCancelled { try? await Task.sleep(for: .milliseconds(100)) }
                     let success = await store.refreshDueSources()
                     task.setTaskCompleted(success: success && !Task.isCancelled)
                 }
