@@ -70,7 +70,7 @@ final class ProviderImportUITests: XCTestCase {
         app.buttons["Done"].tap()
         app.selectMainTab("Guide")
         XCTAssertTrue(app.buttons["Now"].waitForExistence(timeout: 15))
-        app.selectMainTab("Live")
+        app.selectMainTab("Home")
     }
 
     @MainActor func testSavedSourceCatalogAndGuideCanBeBrowsed() throws {
@@ -105,7 +105,7 @@ final class ProviderImportUITests: XCTestCase {
         app.buttons["Done"].tap()
         app.selectMainTab("Guide")
         XCTAssertTrue(app.buttons["Now"].waitForExistence(timeout: 15))
-        app.selectMainTab("Live")
+        app.selectMainTab("Home")
     }
 
     @MainActor func testAuthorizedSourceConnectsAndSurvivesRelaunch() throws {
@@ -150,10 +150,10 @@ final class ProviderImportUITests: XCTestCase {
 
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.buttons["All Channels"].waitForExistence(timeout: 60), "The imported catalog should survive a normal app relaunch.")
+        app.waitForSavedCatalog(timeout: 60)
         app.selectMainTab("Guide")
         XCTAssertTrue(app.buttons["Now"].waitForExistence(timeout: 15))
-        app.selectMainTab("Live")
+        app.selectMainTab("Home")
     }
 
     private struct Connection: Decodable {

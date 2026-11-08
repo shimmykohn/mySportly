@@ -27,46 +27,11 @@ import UIKit
         capture("After - Guide Filters")
         app.buttons["close-guide-options"].tap()
     }
-    func testFollowingChangesSportsResultsAndCanBeRemoved() {
-        let app = XCUIApplication()
-        app.launchArguments = ["--demo", "--demo-sports-check"]
-        app.launch()
-        waitForCatalog(app)
-        app.selectMainTab("Sports")
-        app.buttons["manage-sports-following"].tap()
-        app.segmentedControls.buttons["Teams"].tap()
-        let search = app.searchFields.firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: 5))
-        search.tap(); search.typeText("Knicks")
-        app.buttons["Add New York Knicks to Library"].tap()
-        XCTAssertTrue(app.buttons["Remove New York Knicks from Library"].exists)
-        capture("After - Follow Team")
-        if app.keyboards.count > 0 { search.typeText("\n") }
-        app.buttons["BackButton"].firstMatch.tap()
-        XCTAssertTrue(app.staticTexts["On Now"].firstMatch.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["New York Knicks"].firstMatch.exists)
-        capture("After - Following Schedule")
-        app.buttons["manage-sports-following"].tap()
-        app.segmentedControls.buttons["Teams"].tap()
-        let currentSearch = app.searchFields.firstMatch
-        currentSearch.tap(); currentSearch.typeText("Knicks")
-        app.buttons["Remove New York Knicks from Library"].tap()
-        XCTAssertTrue(app.buttons["Add New York Knicks to Library"].exists)
-        currentSearch.tap()
-        currentSearch.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 6) + "Cowboys")
-        app.buttons["Add Dallas Cowboys to Library"].tap()
-        if app.keyboards.count > 0 { currentSearch.typeText("\n") }
-        app.buttons["BackButton"].firstMatch.tap()
-        XCTAssertTrue(app.buttons["followed-channel-sample.unscheduled"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Matching Channels"].exists)
-        XCTAssertFalse(app.staticTexts["On Now"].exists)
-        capture("After - Following Without Listings")
-    }
-    func testUnifiedLibraryKeepsTeamsInsideLeagueAndFavoritesToday() {
+    func testUnifiedLibraryKeepsTeamsInsideLeagueAndHomeShowsTheGameOnce() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "--demo-sports-api-check"]
         app.launch(); waitForCatalog(app)
-        app.selectMainTab("Library")
+        app.selectMainTab("My Stuff")
         app.buttons["add-to-library"].tap()
         app.buttons["Teams & Leagues"].tap()
         let search = app.searchFields.firstMatch
@@ -91,14 +56,13 @@ import UIKit
         XCTAssertEqual(app.switches["sports-favorite"].value as? String, "0", "A league favorite must not favorite all its teams")
         setFavorite(app, to: true)
         capture("Unified Library - separately saved team and favorite")
-        app.selectMainTab("Live")
-        XCTAssertTrue(app.staticTexts["Favorites Today"].waitForExistence(timeout: 10))
-        let games = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'sports-game-'"))
+        app.selectMainTab("Home")
+        let games = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'home-game-'"))
+        XCTAssertTrue(app.descendants(matching: .any)["home-teams"].waitForExistence(timeout: 10))
         XCTAssertTrue(games.firstMatch.waitForExistence(timeout: 10))
-        XCTAssertEqual(games.count, 1, "Team and league favorites must not duplicate the same broadcast")
-        XCTAssertTrue(app.staticTexts["On now · guide"].exists)
-        capture("Favorites Today - one game with alternate streams")
-        app.selectMainTab("Library")
+        XCTAssertEqual(games.count, 1, "A followed team's game in an added league must appear once, in Your Teams")
+        capture("Home - one game for a team in an added league")
+        app.selectMainTab("My Stuff")
         back(app, expecting: app.navigationBars["NBA Teams"])
         back(app, expecting: app.buttons["league-teams"])
         app.buttons["Library Options"].tap()
@@ -113,8 +77,8 @@ import UIKit
         XCTAssertEqual(app.switches["sports-favorite"].value as? String, "1", "Removing a league preserves an individually favorited team")
         setFavorite(app, to: false)
         XCTAssertTrue(app.staticTexts["In Your Library"].exists)
-        app.selectMainTab("Live")
-        XCTAssertFalse(app.staticTexts["Favorites Today"].exists, "Unfavoriting must update Home immediately")
+        app.selectMainTab("Home")
+        XCTAssertTrue(app.buttons["home-game-sample.game"].waitForExistence(timeout: 10), "A saved team stays on Home without a star")
     }
     private func back(_ app: XCUIApplication, expecting destination: XCUIElement) {
         // Notification banners can absorb toolbar taps on a personal device.

@@ -2,18 +2,11 @@ import XCTest
 
 extension XCUIApplication {
     @MainActor func waitForSavedCatalog(timeout: TimeInterval = 90, file: StaticString = #filePath, line: UInt = #line) {
-        XCTAssertTrue(buttons["live-filters"].firstMatch.waitForExistence(timeout: timeout), file: file, line: line)
+        let ready = descendants(matching: .any).matching(NSPredicate(format: "identifier == 'home-root' AND value CONTAINS 'ready=1'")).firstMatch
+        XCTAssertTrue(ready.waitForExistence(timeout: timeout), "Home never reported a prepared catalog", file: file, line: line)
     }
     @MainActor func selectLineup(_ title: String, file: StaticString = #filePath, line: UInt = #line) {
         let picker = buttons["lineup-scope"].firstMatch
-        let liveFilters = buttons["live-filters"].firstMatch
-        if !picker.exists && liveFilters.exists {
-            liveFilters.tap()
-            let choices = buttons.matching(NSPredicate(format: "label == %@", title))
-            XCTAssertTrue(choices.firstMatch.waitForExistence(timeout: 5), file: file, line: line)
-            (choices.allElementsBoundByIndex.last { $0.isHittable } ?? choices.firstMatch).tap()
-            return
-        }
         let filters = buttons["Guide Filters"].firstMatch
         let opensGuideFilters = !picker.exists && filters.waitForExistence(timeout: 5)
         if opensGuideFilters {

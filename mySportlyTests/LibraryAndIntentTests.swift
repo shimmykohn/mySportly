@@ -32,7 +32,7 @@ import AppIntents
         store.route(AppRouteInbox.url("save", name: "id", value: channel.id))
         #expect(store.hasLibraryItem(store.bookmark(channel)))
         store.route(AppRouteInbox.url("library", name: "id", value: store.bookmark(channel).id))
-        #expect(store.selectedTab == .library)
+        #expect(store.selectedTab == .myStuff)
         #expect(store.libraryRoute?.reference == channel.id)
         store.route(AppRouteInbox.url("search", name: "query", value: "News & Sports / today"))
         #expect(store.selectedTab == .search)

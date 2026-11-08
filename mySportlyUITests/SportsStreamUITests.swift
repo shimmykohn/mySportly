@@ -6,15 +6,38 @@ import UIKit
         continueAfterFailure = false
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
     }
-    func testGuideGameFeedPickerAndNativePlayer() throws {
+    func testHomeGamePlaysAndGamePageFeedPicker() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["--demo", "--demo-sports-api-check"]
+        app.launchArguments = ["--demo", "--demo-sports-api-check", "--demo-home-follows"]
         app.launch()
         app.waitForSavedCatalog()
-        app.selectMainTab("Sports")
+        let homeGame = app.buttons["home-game-sample.game"].firstMatch
+        XCTAssertTrue(homeGame.waitForExistence(timeout: 15))
+        capture("Home - followed team's live game")
+        homeGame.tap()
+        let preview = app.descendants(matching: .any)["stream-preview"].firstMatch
+        XCTAssertTrue(preview.waitForExistence(timeout: 10))
+        waitForVideo(preview)
+        capture("Home game - first video frame")
+        let picker = app.buttons["player-stream-picker"]
+        reveal(picker, app: app); picker.tap()
+        app.buttons["Sample Sports Alternate HD"].tap()
+        waitForVideo(preview)
+        XCTAssertTrue(picker.label.contains("Alternate") || (picker.value as? String)?.contains("Alternate") == true)
+        let quality = app.buttons["player-quality-picker"]
+        reveal(quality, app: app); quality.tap()
+        app.buttons["Up to 720p"].tap()
+        XCTAssertTrue(quality.label.contains("720p") || (quality.value as? String)?.contains("720p") == true)
+        capture("Player - native feed and quality controls")
+        app.buttons["close-player"].tap()
+        app.buttons["Stop"].firstMatch.tap()
+        // The same game is reachable from the team's page in My Stuff.
+        app.selectMainTab("My Stuff")
+        let team = app.buttons["library-item-New York Knicks"].firstMatch
+        XCTAssertTrue(team.waitForExistence(timeout: 10)); team.tap()
         let game = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'sports-game-'")).firstMatch
-        XCTAssertTrue(game.waitForExistence(timeout: 15))
-        capture("Sports - grouped guide game")
+        XCTAssertTrue(game.waitForExistence(timeout: 10))
+        capture("Team page - game")
         game.tap()
         let watch = app.buttons["watch-sports-game"]
         XCTAssertTrue(watch.waitForExistence(timeout: 10))
@@ -22,47 +45,10 @@ import UIKit
         let gamePicker = app.buttons["game-stream-picker"]
         reveal(gamePicker, app: app); gamePicker.tap()
         app.buttons["Sample Sports Alternate HD"].tap()
-        capture("Sports - native game stream picker selection")
+        capture("Game page - native stream picker selection")
         watch.tap()
-        let preview = app.descendants(matching: .any)["stream-preview"].firstMatch
         XCTAssertTrue(preview.waitForExistence(timeout: 10))
         waitForVideo(preview)
-        capture("Sports - first video frame")
-        let picker = app.buttons["player-stream-picker"]
-        reveal(picker, app: app); picker.tap()
-        app.buttons["Sample Sports"].tap()
-        waitForVideo(preview)
-        XCTAssertTrue(picker.label.contains("Sample Sports") || (picker.value as? String)?.contains("Sample Sports") == true)
-        let quality = app.buttons["player-quality-picker"]
-        reveal(quality, app: app); quality.tap()
-        app.buttons["Up to 720p"].tap()
-        XCTAssertTrue(quality.label.contains("720p") || (quality.value as? String)?.contains("720p") == true)
-        capture("Sports - native feed and quality controls")
-        app.buttons["close-player"].tap()
-        app.buttons["Stop"].firstMatch.tap()
-        // The same game is reachable under a team and under its league.
-        let team = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "New York Knicks")).firstMatch
-        reveal(team, app: app); team.tap()
-        XCTAssertTrue(app.buttons["save-sports-item"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'sports-game-'")).firstMatch.waitForExistence(timeout: 10))
-        capture("Sports - game on team page")
-        app.buttons["BackButton"].firstMatch.tap()
-        let league = app.buttons["NBA"].firstMatch
-        reveal(league, app: app); league.tap()
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'sports-game-'")).firstMatch.waitForExistence(timeout: 10))
-        capture("Sports - game on league page")
-    }
-    func testSavedGuideDisplaysGroupedGames() throws {
-        let app = XCUIApplication(); app.launch()
-        app.waitForSavedCatalog()
-        app.selectMainTab("Sports")
-        app.segmentedControls["sports-scope"].buttons["All Sports"].tap()
-        let game = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'sports-game-'")).firstMatch
-        XCTAssertTrue(game.waitForExistence(timeout: 20), "Requires the saved current guide checked by SportsDataDeviceTests")
-        capture("Sports - saved provider games and cached logos")
-        game.tap()
-        XCTAssertTrue(app.buttons["game-stream-picker"].waitForExistence(timeout: 10))
-        capture("Sports - saved provider game feeds")
     }
     private func waitForVideo(_ preview: XCUIElement) {
         let ready = NSPredicate { _, _ in preview.value as? String == "Video ready" }

@@ -14,11 +14,11 @@ struct HomeHeroPager: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.bottom, items.count > 1 ? 28 : 0)
+                .padding(.bottom, items.count > 1 ? 36 : 0)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .always : .never))
-        .frame(height: (sizeClass == .regular ? 380 : 260) + (items.count > 1 ? 28 : 0))
+        .frame(height: (sizeClass == .regular ? 400 : 300) + (items.count > 1 ? 36 : 0))
     }
 }
 
@@ -32,14 +32,14 @@ struct HeroGameArt: View {
     var body: some View {
         LinearGradient(colors: [awayColor ?? Color.secondary.opacity(0.35), homeColor ?? Color.secondary.opacity(0.2)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
-            .overlay {
-                HStack(spacing: 28) {
-                    SportsLogo(url: away?.logo, size: 72)
-                    SportsLogo(url: home?.logo, size: 72)
+            .overlay(alignment: .top) {
+                HStack(spacing: 24) {
+                    SportsLogo(url: away?.logo, size: 56)
+                    SportsLogo(url: home?.logo, size: 56)
                 }
-                .padding(.horizontal, 28).padding(.vertical, 18)
-                .glassEffect(in: .rect(cornerRadius: 28))
-                .offset(y: -28)
+                .padding(.horizontal, 22).padding(.vertical, 12)
+                .glassEffect(in: .rect(cornerRadius: 24))
+                .padding(.top, 18)
             }
             .task(id: away?.logo) { awayColor = await color(away?.logo) }
             .task(id: home?.logo) { homeColor = await color(home?.logo) }
@@ -79,7 +79,10 @@ struct HeroGamePage: View {
                             Label(team.libraryItem.name, systemImage: store.isFollowing(team) ? "checkmark" : "plus")
                         }
                     }
-                } label: { Label("Follow", systemImage: "plus") }
+                } label: {
+                    if playing.contains(where: store.isFollowing) { Label("Following", systemImage: "checkmark") }
+                    else { Label("Follow", systemImage: "plus") }
+                }
                 .buttonStyle(.glass)
             }
         }
@@ -95,9 +98,9 @@ struct HeroChannelPage: View {
             let favorite = store.flag(channel, "favorite")
             HeroCard {
                 LinearGradient(colors: [Color.accentColor.opacity(0.55), Color.secondary.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .overlay {
-                        ChannelLogo(url: channel.logo).frame(width: 150, height: 90)
-                            .glassEffect(in: .rect(cornerRadius: 24)).offset(y: -28)
+                    .overlay(alignment: .top) {
+                        ChannelLogo(url: channel.logo).frame(width: 130, height: 76)
+                            .glassEffect(in: .rect(cornerRadius: 22)).padding(.top, 18)
                     }
             } details: {
                 Text(store.name(channel)).font(.subheadline).opacity(0.85)

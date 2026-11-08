@@ -27,9 +27,6 @@ import UIKit
     func testSystemLiveActivityBackgroundProgressAndPauseResume() {
         let app = XCUIApplication(); app.launchArguments = ["--demo", "--demo-organization-progress"]
         app.launch(); app.waitForSavedCatalog()
-        XCTAssertTrue(app.activityIndicators["live-loading"].waitForExistence(timeout: 15))
-        XCTAssertFalse(app.staticTexts["organization-progress-count"].exists, "Live header contains only its spinner")
-        capture("Jev spinner in soft header")
         openAISettings(app)
         let count = app.staticTexts["organization-progress-count"]
         for _ in 0..<5 where !count.isHittable { app.swipeUp() }

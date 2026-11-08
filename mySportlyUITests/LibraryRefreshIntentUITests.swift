@@ -6,24 +6,6 @@ import UIKit
         continueAfterFailure = false
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
     }
-    func testRefreshSettingsAndDataOrigins() {
-        let app = XCUIApplication(); app.launchArguments = ["--demo"]
-        app.launch(); app.waitForSavedCatalog()
-        app.buttons["Settings"].firstMatch.tap()
-        app.buttons["refresh-settings"].tap()
-        XCTAssertTrue(app.navigationBars["Automatic Refresh"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.buttons["playlist-refresh-frequency"].exists)
-        XCTAssertTrue(app.buttons["guide-refresh-frequency"].exists)
-        app.buttons["playlist-refresh-frequency"].tap()
-        app.buttons["Weekly"].tap()
-        XCTAssertTrue(app.staticTexts["Weekly"].exists || app.buttons["playlist-refresh-frequency"].label.contains("Weekly"))
-        capture("Native automatic refresh settings")
-        app.buttons["BackButton"].firstMatch.tap()
-        app.buttons["data-origin-settings"].tap()
-        XCTAssertTrue(app.navigationBars["Where Data Comes From"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["From Your Provider"].exists)
-        capture("Data origins explained in Settings")
-    }
     func testIOS27SearchIntentHandsOffIntoNativeSearch() {
         let app = XCUIApplication(); app.launchArguments = ["--demo", "--demo-intent-search"]
         app.launch()

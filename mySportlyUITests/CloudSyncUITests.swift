@@ -15,7 +15,7 @@ final class CloudSyncUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         if app.navigationBars["Welcome"].waitForExistence(timeout: 5) { app.buttons["Explore Sample Catalog"].tap() }
-        app.selectMainTab("Library")
+        app.selectMainTab("My Stuff")
         app.buttons["Groups"].tap()
         let group = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
         switch phase {

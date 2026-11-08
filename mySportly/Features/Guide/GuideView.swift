@@ -76,7 +76,6 @@ struct GuideView: View {
                 Button("Guide Filters", systemImage: filter == "For You" ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill") { sheet = .filters }
             }
         }
-        .appToolbar()
         .sheet(item: $sheet) { selection in
             NavigationStack {
                 Form {

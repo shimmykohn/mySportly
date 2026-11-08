@@ -5,7 +5,7 @@ import WidgetKit
 import AppIntents
 import os
 
-enum AppTab: String, CaseIterable, Codable, Hashable { case live = "Live", guide = "Guide", sports = "Sports", library = "Library", search = "Search" }
+enum AppTab: String, CaseIterable, Codable, Hashable { case home = "Home", guide = "Guide", myStuff = "My Stuff", search = "Search" }
 struct ChannelGroup: Codable, Identifiable, Hashable { var id = UUID(); var name: String; var channelIDs: [String] }
 struct AppNotice: Identifiable { let id = UUID(); var title: String; var message: String }
 
@@ -22,8 +22,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     let intelligence = IntelligenceService()
     let organization = OrganizationProgress()
     let sportsData = SportsDataStore()
-    let sportsScreen = SportsScreenModel()
-    let favoritesToday = FavoritesTodayModel()
     private(set) var gameLinks: [String: [SportsFeedLink]] = [:]
     /// Home's games; restored from the launch snapshot, replaced by guide matching.
     private(set) var homeSports = HomeSportsData()
@@ -65,7 +63,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private var sourceGuideIDs: [UUID: [String]] = [:]
     private(set) var guideMatches: [String: GuideMatch] = [:]
     private(set) var playbackAlternatives: [String: [String]] = [:]
-    var selectedTab: AppTab = .live
+    var selectedTab: AppTab = .home
     var showPlayer = false
     var showSettings = false
     var showSetup = false
@@ -106,7 +104,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         let processStart = LaunchTimeline.processStartDate().map { LaunchTimeline.instant(for: $0, now: created, wallNow: createdWall) } ?? created
         launchTimeline.mark(.processStart, at: processStart)
         launchTimeline.mark(.storeCreated, at: created)
-        selectedTab = AppTab(rawValue: personal.value("preferences.startTab", default: "Live")) ?? .live
         playback.quality = StreamQuality(rawValue: personal.value("preferences.streamQuality", default: "Auto")) ?? .automatic
         playback.onFailure = { [weak self] in self?.offerAlternate() }
         sportsData.onUpdate = { [weak self] in self?.matchSportsGames() }
@@ -1050,13 +1047,13 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         switch url.host {
         case "guide": selectedTab = .guide
         case "search": searchRequest = values.first { $0.name == "query" }?.value ?? ""; selectedTab = .search
-        case "refresh": selectedTab = .live; Task { await refreshDueSources(force: true) }
+        case "refresh": selectedTab = .home; Task { await refreshDueSources(force: true) }
         case "library":
-            selectedTab = .library
+            selectedTab = .myStuff
             if let id, let item = savedLibraryItems.first(where: { $0.id == id }) { libraryRoute = item }
             else { inform("Saved item unavailable", "This item is no longer in your Library.") }
         case "save":
-            if let id, let channel = channelIndex[id] { saveLibraryItem(bookmark(channel)); selectedTab = .library }
+            if let id, let channel = channelIndex[id] { saveLibraryItem(bookmark(channel)); selectedTab = .myStuff }
             else { inform("Channel unavailable", "This channel is no longer in the current playlist.") }
         default: break
         }

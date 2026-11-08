@@ -26,7 +26,7 @@ import UIKit
         let guideCount = app.staticTexts["guide-channel-count"].firstMatch
         let readyGuide = NSPredicate { _, _ in (Int(guideCount.value as? String ?? "0") ?? 0) > 50_000 }
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: readyGuide, evaluatedWith: nil)], timeout: 12), .completed)
-        app.selectMainTab("Library")
+        app.selectMainTab("My Stuff")
         var start = Date()
         app.buttons["All Channels"].firstMatch.tap()
         XCTAssertTrue(app.switches["Include Hidden Channels"].waitForExistence(timeout: 8))
@@ -48,7 +48,8 @@ import UIKit
         XCTAssertTrue(app.textFields["Group Name"].waitForExistence(timeout: 8))
         app.buttons["Cancel"].tap()
         app.navigationBars["Groups"].buttons.element(boundBy: 0).tap()
-        app.buttons["Settings"].firstMatch.tap()
+        app.selectMainTab("Home")
+        app.buttons["home-profile"].firstMatch.tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
         app.swipeUp()
         capture("Settings soft header", app: app)
@@ -62,9 +63,9 @@ import UIKit
     func testNativePlayerShowsTheFirstVideoFrame() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["--demo"]
+        app.launchArguments = ["--demo", "--demo-home-follows"]
         app.launch()
-        let channel = app.buttons["play-channel-sample.0"].firstMatch
+        let channel = app.buttons["home-channel-sample.0"].firstMatch
         XCTAssertTrue(channel.waitForExistence(timeout: 15))
         channel.tap()
         let preview = app.descendants(matching: .any)["stream-preview"].firstMatch
@@ -85,14 +86,6 @@ import UIKit
         attachment.name = name; attachment.lifetime = .keepAlways
         add(attachment)
     }
-    func testLiveCategoriesLoadFromTheIndex() {
-        let app = XCUIApplication()
-        app.launchArguments = ["--demo"]
-        app.launch()
-        app.waitForSavedCatalog()
-        XCTAssertTrue(app.buttons["category-group-Sports"].waitForExistence(timeout: 15))
-    }
-
     private func openSavedCatalog() throws -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -107,22 +100,6 @@ import UIKit
             if (Int(count.filter(\.isNumber)) ?? 0) < 50_000 { throw XCTSkip("Requires a large saved provider catalog") }
         }
         return app
-    }
-
-    func testSavedCatalogSportsResponseTime() throws {
-        let app = try openSavedCatalog()
-        let start = Date()
-        app.selectMainTab("Sports")
-        XCTAssertTrue(app.segmentedControls["sports-scope"].firstMatch.waitForExistence(timeout: 90))
-        // A visible schedule row or the finished empty state must be present, not just the navigation title.
-        let ready = NSPredicate { _, _ in
-            app.staticTexts["On Now"].firstMatch.exists || app.staticTexts["Coming Up"].firstMatch.exists ||
-            app.staticTexts["No Matching Sports Listings"].firstMatch.exists
-        }
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: ready, evaluatedWith: nil)], timeout: 90), .completed)
-        let elapsed = Date().timeIntervalSince(start)
-        print("[CatalogPerformance] sports_ready_seconds=\(elapsed)")
-        XCTAssertLessThan(elapsed, 10, "Opening Sports must not rescan the catalog on the UI thread")
     }
 
     func testSavedCatalogSearchResponseTime() throws {

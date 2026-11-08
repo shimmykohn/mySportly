@@ -44,7 +44,6 @@ struct LibraryView: View {
                 NavigationLink { AddToLibraryView() } label: { Label("Add to Library", systemImage: "plus") }.accessibilityIdentifier("add-to-library")
             }
         }
-        .appToolbar()
     }
 }
 

@@ -6,11 +6,10 @@ struct ContentView: View {
     var body: some View {
         @Bindable var store = store
         TabView(selection: $store.selectedTab) {
-            Tab("Live", systemImage: "play.tv", value: AppTab.live) { NavigationStack { LiveView() } }
+            Tab("Home", systemImage: "house", value: AppTab.home) { NavigationStack { HomeView() } }
             Tab("Guide", systemImage: "list.bullet.rectangle", value: AppTab.guide) { NavigationStack { GuideView() } }
-            Tab("Sports", systemImage: "sportscourt", value: AppTab.sports) { NavigationStack { SportsView() } }
-            Tab("Library", systemImage: "square.stack", value: AppTab.library) { NavigationStack { LibraryView() } }
-            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) { NavigationStack { SearchScreen().appToolbar() } }
+            Tab("My Stuff", systemImage: "square.stack", value: AppTab.myStuff) { NavigationStack { LibraryView().navigationTitle("My Stuff") } }
+            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) { NavigationStack { SearchScreen() } }
         }
         .tabViewStyle(.sidebarAdaptable)
         .scrollEdgeEffectStyle(.soft, for: .top)
@@ -20,19 +19,9 @@ struct ContentView: View {
         .sheet(isPresented: $store.showPlayer) { PlayerScreen().scrollEdgeEffectStyle(.soft, for: .top).presentationDragIndicator(.visible) }
         .fullScreenCover(isPresented: $store.showMultiview) { MultiviewScreen().scrollEdgeEffectStyle(.soft, for: .top) }
         .alert(store.notice?.title ?? "mySportly", isPresented: Binding(get: { store.notice != nil }, set: { if !$0 { store.notice = nil } }), presenting: store.notice) { _ in Button("OK", role: .cancel) { store.notice = nil } } message: { Text($0.message) }
-        .overlay { if store.loading && store.selectedTab != .live { ProgressView("Opening your saved lineup…").padding().background(.background, in: .rect(cornerRadius: 12)).accessibilityIdentifier("catalog-loading") } }
+        .overlay { if store.loading && store.selectedTab != .home { ProgressView("Opening your saved lineup…").padding().background(.background, in: .rect(cornerRadius: 12)).accessibilityIdentifier("catalog-loading") } }
     }
 }
-
-struct AppToolbar: ViewModifier {
-    @Environment(AppStore.self) private var store
-    func body(content: Content) -> some View {
-        content.toolbar {
-            ToolbarItem(placement: .topBarTrailing) { Button("Settings", systemImage: "gearshape") { store.showSettings = true } }
-        }
-    }
-}
-extension View { func appToolbar() -> some View { modifier(AppToolbar()) } }
 
 struct ChannelRow: View {
     @Environment(AppStore.self) private var store
