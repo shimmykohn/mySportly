@@ -3,6 +3,7 @@ import Observation
 import SwiftUI
 import WidgetKit
 import AppIntents
+import os
 
 enum AppTab: String, CaseIterable, Codable, Hashable { case live = "Live", guide = "Guide", sports = "Sports", library = "Library", search = "Search" }
 struct ChannelGroup: Codable, Identifiable, Hashable { var id = UUID(); var name: String; var channelIDs: [String] }
@@ -30,6 +31,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private(set) var activeSportsGameID: String?
     @ObservationIgnored private var sportsMatchTask: Task<Void, Never>?
     private let cache = CatalogCache()
+    private(set) var launchTimeline = LaunchTimeline()
+    @ObservationIgnored private let launchSignposter = OSSignposter(subsystem: "app.iska.mysportly", category: "Launch")
     private let provider = ProviderClient()
     private(set) var catalog = CatalogSnapshot()
     private(set) var channels: [Channel] = []
@@ -91,7 +94,9 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private var attemptedRestores = Set<UUID>()
 
     init(inMemory: Bool = false, registerBackground: Bool = false) {
+        let processStart = ContinuousClock.now
         personal = PersonalStore(inMemory: inMemory)
+        launchTimeline.mark(.processStart, at: processStart)
         selectedTab = AppTab(rawValue: personal.value("preferences.startTab", default: "Live")) ?? .live
         playback.quality = StreamQuality(rawValue: personal.value("preferences.streamQuality", default: "Auto")) ?? .automatic
         playback.onFailure = { [weak self] in self?.offerAlternate() }
@@ -190,14 +195,22 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         } catch { inform("Jev setup", "The key could not be saved in this device’s Keychain.") }
         #endif
         Task { await sportsData.load() }
+        let catalogLoad = launchSignposter.beginInterval("catalogLoad")
         do { catalog = try await cache.load() }
         catch { inform("Saved catalog unavailable", "Your personal choices are safe. Refresh your sources to restore the local catalog.") }
+        launchSignposter.endInterval("catalogLoad", catalogLoad)
+        launchTimeline.mark(.catalogDecoded)
+        let restoreState = launchSignposter.beginInterval("restoreState")
         await reminders.reload(); await recorder.reload()
         await personal.refreshCloudStatus()
         await organization.restore()
+        launchSignposter.endInterval("restoreState", restoreState)
+        let prepare = launchSignposter.beginInterval("prepare")
         rebuild(force: true)
         await waitForCatalog()
+        launchSignposter.endInterval("prepare", prepare)
         loading = false
+        launchTimeline.mark(.firstInteractive)
         updateIntentCatalog()
         showSetup = !personal.value("setup.complete", default: false)
         await restoreMissingSources()
@@ -309,6 +322,12 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                 self.queryIndex = prepared.query
                 self.queryRevision += 1
                 self.preparingCatalog = false
+                if self.launchTimeline.milliseconds(to: .catalogPrepared) == nil {
+                    self.launchTimeline.mark(.catalogPrepared)
+                    #if DEBUG
+                    print("[Launch] " + self.launchTimeline.summary)
+                    #endif
+                }
                 self.matchSportsGames()
                 self.updateWidgetSnapshot()
                 self.updateIntentCatalog()
