@@ -6,46 +6,6 @@
 	objectVersion = 110;
 	objects = {
 
-/* Begin Widget target objects */
-		A10000000000000000000001 = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = mySportlyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		A10000000000000000000002 = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (A10000000000000000000003,); path = mySportlyWidgets; sourceTree = "<group>"; };
-		A10000000000000000000003 = {isa = PBXFileSystemSynchronizedBuildFileExceptionSet; membershipExceptions = (Info.plist,); target = A10000000000000000000004; };
-		A10000000000000000000004 = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = A10000000000000000000008;
-			buildPhases = (A10000000000000000000005, A10000000000000000000006, A10000000000000000000007,);
-			buildRules = ();
-			dependencies = ();
-			fileSystemSynchronizedGroups = (A10000000000000000000002,);
-			name = mySportlyWidgets;
-			productName = mySportlyWidgets;
-			productReference = A10000000000000000000001;
-			productType = "com.apple.product-type.app-extension";
-		};
-		A10000000000000000000005 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A10000000000000000000006 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A10000000000000000000007 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
-		A10000000000000000000008 = {isa = XCConfigurationList; buildConfigurations = (A10000000000000000000009, A1000000000000000000000A,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		A10000000000000000000009 = {isa = XCBuildConfiguration; name = Debug; buildSettings = {
-			APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CODE_SIGN_ENTITLEMENTS = mySportlyWidgets/mySportlyWidgets.entitlements; DEVELOPMENT_TEAM = 53PDS96TM4;
-			GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = mySportlyWidgets/Info.plist; INFOPLIST_KEY_CFBundleDisplayName = "mySportly";
-			IPHONEOS_DEPLOYMENT_TARGET = 27.0; PRODUCT_BUNDLE_IDENTIFIER = app.iska.mysportly.widgets; PRODUCT_NAME = "$(TARGET_NAME)";
-			SDKROOT = iphoneos; SKIP_INSTALL = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2";
-			CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-		}; };
-		A1000000000000000000000A = {isa = XCBuildConfiguration; name = Release; buildSettings = {
-			APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_STYLE = Automatic; CODE_SIGN_ENTITLEMENTS = mySportlyWidgets/mySportlyWidgets.entitlements; DEVELOPMENT_TEAM = 53PDS96TM4;
-			GENERATE_INFOPLIST_FILE = YES; INFOPLIST_FILE = mySportlyWidgets/Info.plist; INFOPLIST_KEY_CFBundleDisplayName = "mySportly";
-			IPHONEOS_DEPLOYMENT_TARGET = 27.0; PRODUCT_BUNDLE_IDENTIFIER = app.iska.mysportly.widgets; PRODUCT_NAME = "$(TARGET_NAME)";
-			SDKROOT = iphoneos; SKIP_INSTALL = YES; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = "1,2";
-			CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-		}; };
-		A1000000000000000000000B = {isa = PBXBuildFile; fileRef = A10000000000000000000001; settings = {ATTRIBUTES = (RemoveHeadersOnCopy,); }; };
-		A1000000000000000000000C = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (A1000000000000000000000B,); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0; };
-		A1000000000000000000000D = {isa = PBXContainerItemProxy; containerPortal = 70C2D1253085458600EB0624; proxyType = 1; remoteGlobalIDString = A10000000000000000000004; remoteInfo = mySportlyWidgets; };
-		A1000000000000000000000E = {isa = PBXTargetDependency; target = A10000000000000000000004; targetProxy = A1000000000000000000000D; };
-/* End Widget target objects */
-
 /* Begin PBXContainerItemProxy section */
 		70C2D13F3085458800EB0624 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -125,7 +85,6 @@
 				70C2D12F3085458600EB0624 /* mySportly */,
 				70C2D1413085458800EB0624 /* mySportlyTests */,
 				70C2D14B3085458800EB0624 /* mySportlyUITests */,
-				A10000000000000000000002 /* mySportlyWidgets */,
 				70C2D12E3085458600EB0624 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -136,7 +95,6 @@
 				70C2D12D3085458600EB0624 /* mySportly.app */,
 				70C2D13E3085458800EB0624 /* mySportlyTests.xctest */,
 				70C2D1483085458800EB0624 /* mySportlyUITests.xctest */,
-				A10000000000000000000001 /* mySportlyWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -151,9 +109,9 @@
 				70C2D1293085458600EB0624 /* Sources */,
 				70C2D12A3085458600EB0624 /* Frameworks */,
 				70C2D12B3085458600EB0624 /* Resources */,
-				A1000000000000000000000C /* Embed App Extensions */,
 			);
-			dependencies = (A1000000000000000000000E,);
+			dependencies = (
+			);
 			buildRules = (
 			);
 			fileSystemSynchronizedGroups = (
@@ -246,7 +204,6 @@
 				70C2D12C3085458600EB0624 /* mySportly */,
 				70C2D13D3085458800EB0624 /* mySportlyTests */,
 				70C2D1473085458800EB0624 /* mySportlyUITests */,
-				A10000000000000000000004 /* mySportlyWidgets */,
 			);
 		};
 /* End PBXProject section */

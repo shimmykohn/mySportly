@@ -1,8 +1,6 @@
 import Foundation
 import Observation
 import SwiftUI
-import WidgetKit
-import AppIntents
 import os
 
 enum AppTab: String, CaseIterable, Codable, Hashable { case home = "Home", guide = "Guide", myStuff = "My Stuff", search = "Search" }
@@ -50,8 +48,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     @ObservationIgnored private var preparedStages: PreparedStages?
     @ObservationIgnored private var stagesSaveTask: Task<Void, Never>?
     @ObservationIgnored private let catalogLifetime = CatalogSnapshotLifetime()
-    @ObservationIgnored private var widgetTask: Task<Void, Never>?
-    @ObservationIgnored private var intentCatalogTask: Task<Void, Never>?
     @ObservationIgnored private var sportsLibraryRevision = -1
     @ObservationIgnored private var savedSports: [SportsLibraryItem] = []
     @ObservationIgnored private var sportsMembershipRevision = -1
@@ -93,7 +89,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private(set) var refreshBatchRunning = false
     private(set) var refreshMessage: String?
     var searchRequest: String?
-    var libraryRoute: LibraryBookmark?
     var demo = false
     private var attemptedRestores = Set<UUID>()
 
@@ -241,7 +236,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         await organization.restore()
         if personal.revision != revision { rebuild() }
         launchSignposter.endInterval("restoreState", restoreState)
-        updateIntentCatalog()
         await restoreMissingSources()
         routingReady = true
         AppRouteInbox.consume(using: self)
@@ -307,10 +301,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func loadDemo() async {
         demo = true; catalog = SampleCatalog.snapshot()
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--demo-intent-search") {
-            let intent = SearchTVIntent(); intent.criteria = StringSearchCriteria(term: "Sample News")
-            _ = try? await intent.perform()
-        }
         if ProcessInfo.processInfo.arguments.contains("--demo-empty-favorites") {
             let item = SportsLibraryItem(name: "Dallas Cowboys", kind: .team)
             try? personal.set("sports.library.\(item.id)", SportsLibraryEntry(item: item, saved: true))
@@ -412,8 +402,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                     #endif
                 }
                 self.matchSportsGames()
-                self.updateWidgetSnapshot()
-                self.updateIntentCatalog()
                 self.saveLaunchSnapshot()
                 if let fresh = prepared.freshStages { self.savePreparedStages(fresh) }
                 await self.catalogLifetime.retain(prepared, revision: self.queryRevision)
@@ -1010,50 +998,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         if error is DecodingError { return "The source returned data in an unexpected format. Check your provider details." }
         return (error as? LocalizedError)?.errorDescription ?? "The operation couldn’t be completed. Your saved choices were retained."
     }
-    func updateWidgetSnapshot() {
-        guard let directory else { return }
-        widgetTask?.cancel()
-        let guide = guideIndex, channelsByID = channelIndex, overrides = personal.snapshotValues(), date = clock, guideMatches = guideMatches
-        widgetTask = Task {
-            do {
-                let snapshot = try await catalogWork {
-                    let decoder = JSONDecoder()
-                    let rows = try directory.visibleNames.enumerated().map { position, row in
-                        if position.isMultiple(of: 256) { try Task.checkCancellation() }
-                        let channel = channelsByID[row.id]!
-                        let key = "channel.\(row.id)."
-                        let guideID = overrides[key + "guideID"].flatMap { try? decoder.decode(String.self, from: $0) } ?? guideMatches[channel.id]?.guideID ?? channel.guideID
-                        let offset = overrides[key + "guideOffset"].flatMap { try? decoder.decode(Int.self, from: $0) } ?? 0
-                        let title = guide[channel.sourceID.uuidString + "|" + guideID]?.first { $0.isLive(at: date - Double(offset) * 60) }?.title
-                        return SharedChannel(id: row.id, name: row.name, program: title)
-                    }
-                    return SharedLineup(updatedAt: date, channels: rows, favorites: directory.favorites.map(\.id))
-                }
-                try Task.checkCancellation()
-                await WidgetBridge.save(snapshot)
-            } catch { /* A newer snapshot superseded this export. */ }
-        }
-    }
-    func updateIntentCatalog() {
-        guard let directory, catalogReady else { return }
-        intentCatalogTask?.cancel()
-        let library = savedLibraryItems, audience = organizationAudience
-        intentCatalogTask = Task {
-            do {
-                try await Task.sleep(for: .milliseconds(250))
-                let snapshot = try await catalogWork {
-                    var request = ChannelBrowseRequest(); request.audience = audience; request.excludeInactive = true
-                    let saved = Set(library.filter { $0.kind == .channel }.map(\.reference))
-                    let preferred = Set(try directory.browse(request).map(\.id)).union(saved)
-                    let channels = directory.visibleNames.filter { preferred.contains($0.id) }.map { SharedChannel(id: $0.id, name: $0.name, program: nil) }
-                    return IntentCatalog(channels: channels, library: library)
-                }
-                try Task.checkCancellation()
-                try await IntentCatalogRepository.shared.save(snapshot)
-                SportlyShortcuts.updateAppShortcutParameters()
-            } catch { /* A newer snapshot or system indexing retry will follow. */ }
-        }
-    }
     func route(_ url: URL) {
         guard url.scheme == "mysportly" else { return }
         let values = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
@@ -1062,13 +1006,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         case "guide": selectedTab = .guide
         case "search": searchRequest = values.first { $0.name == "query" }?.value ?? ""; selectedTab = .search
         case "refresh": selectedTab = .home; Task { await refreshDueSources(force: true) }
-        case "library":
-            selectedTab = .myStuff
-            if let id, let item = savedLibraryItems.first(where: { $0.id == id }) { libraryRoute = item }
-            else { inform("Saved item unavailable", "This item is no longer in your Library.") }
-        case "save":
-            if let id, let channel = channelIndex[id] { saveLibraryItem(bookmark(channel)); selectedTab = .myStuff }
-            else { inform("Channel unavailable", "This channel is no longer in the current playlist.") }
         default: break
         }
         if url.host == "play", let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "id" })?.value {

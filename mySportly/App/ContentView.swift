@@ -1,5 +1,4 @@
 import SwiftUI
-import AppIntents
 
 struct ContentView: View {
     @Environment(AppStore.self) private var store
@@ -42,7 +41,6 @@ struct ChannelRow: View {
             Spacer(minLength: 4)
             if store.flag(channel, "favorite") { Image(systemName: "star.fill").foregroundStyle(.secondary).accessibilityLabel("Favorite") }
         }
-        .appEntityIdentifier(EntityIdentifier(for: ChannelEntity.self, identifier: channel.id))
         .accessibilityElement(children: .combine)
     }
 }

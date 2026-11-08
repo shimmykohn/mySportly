@@ -1,9 +1,8 @@
 import Foundation
 import Testing
-import AppIntents
 @testable import mySportly
 
-@MainActor @Suite(.serialized) struct LibraryAndIntentTests {
+@MainActor @Suite(.serialized) struct LibraryAndRouteTests {
     @Test func savesAreIndependentAndFavoritesKeepTheItemSaved() async throws {
         let store = AppStore(inMemory: true); await store.loadDemo()
         let league = SportsLibraryItem(name: "NFL", kind: .league), team = SportsLibraryItem(name: "Cowboys", kind: .team)
@@ -26,14 +25,8 @@ import AppIntents
         store.removeLibraryItem(category)
         #expect(!store.hasLibraryItem(category)); #expect(!store.isLibraryFavorite(category))
     }
-    @Test func siriRoutesUseSavedContentAndDoNotStartAI() async throws {
+    @Test func linksRouteToTabsAndDoNotStartAI() async throws {
         let store = AppStore(inMemory: true); await store.loadDemo()
-        let channel = try #require(store.channels.first)
-        store.route(AppRouteInbox.url("save", name: "id", value: channel.id))
-        #expect(store.hasLibraryItem(store.bookmark(channel)))
-        store.route(AppRouteInbox.url("library", name: "id", value: store.bookmark(channel).id))
-        #expect(store.selectedTab == .myStuff)
-        #expect(store.libraryRoute?.reference == channel.id)
         store.route(AppRouteInbox.url("search", name: "query", value: "News & Sports / today"))
         #expect(store.selectedTab == .search)
         #expect(store.searchRequest == "News & Sports / today")
@@ -41,6 +34,7 @@ import AppIntents
         store.route(URL(string: "mysportly://guide")!)
         #expect(store.selectedTab == .guide)
         store.route(AppRouteInbox.url("library", name: "id", value: "removed"))
-        #expect(store.notice?.title == "Saved item unavailable")
+        #expect(store.selectedTab == .guide, "Removed routes are ignored")
+        #expect(store.notice == nil)
     }
 }

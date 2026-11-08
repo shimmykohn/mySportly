@@ -32,7 +32,6 @@ import Combine
                         }
                     }
                 }
-                .onChange(of: store.personal.revision) { _, _ in store.updateIntentCatalog() }
                 .onChange(of: store.refreshSchedule) { _, _ in store.scheduleSourceRefresh() }
                 .onChange(of: store.sources) { _, _ in store.scheduleSourceRefresh() }
                 .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { date in if phase == .active { store.clock = date } }

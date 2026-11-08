@@ -13,7 +13,7 @@ final class NotificationRouting: NSObject, UIApplicationDelegate, UNUserNotifica
             completionHandler(); return
         }
         Task { @MainActor in
-            AppRouteInbox.queue(WidgetBridge.playURL(channelID))
+            AppRouteInbox.queue(AppRouteInbox.playURL(channelID))
             completionHandler()
         }
     }
