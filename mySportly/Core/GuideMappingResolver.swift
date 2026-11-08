@@ -13,6 +13,11 @@ public struct GuideMappingResolver: Sendable {
     private struct Key: Hashable { let source: UUID; let region: String; let name: String }
     private struct Candidate: Hashable { let id: String; let language: String }
 
+    /// Restores a resolver from saved `PreparedStages`.
+    init(matches: [String: GuideMatch], ambiguous: Set<String>) {
+        self.matches = matches; self.ambiguous = ambiguous
+    }
+
     public init(channels: [Channel], guideIDs: [UUID: [String]], guideChannels: [GuideChannel] = [], metadata: [String: ChannelMetadata]) throws {
         let available = guideIDs.mapValues(Set.init)
         var foldedIDs: [UUID: [String: Set<String>]] = [:]

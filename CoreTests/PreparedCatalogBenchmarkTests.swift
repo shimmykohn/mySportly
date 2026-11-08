@@ -46,8 +46,14 @@ struct PreparedCatalogBenchmarkTests {
         let mappings = try time("guideMappings") { try GuideMappingResolver(channels: directory.channels, guideIDs: ids.mapValues { $0.sorted() }, metadata: directory.metadata) }
         _ = time("playbackAlternatives") { PlaybackAlternatives.groups(directory.lineup) }
         _ = try time("queryIndex") { try CatalogQueryIndex(channels: directory.lineup, programs: programs, metadata: directory.metadata, guideMatches: mappings.matches) }
-        _ = try time("fullPrepared") { try PreparedCatalog(channels: channels, programs: programs, activeSources: [source], overrides: [:]) }
-        let matchesData = try CatalogCodec.encode(mappings.matches)
+        let full = try time("fullPrepared") { try PreparedCatalog(channels: channels, programs: programs, activeSources: [source], overrides: [:]) }
+        let stagesData = try time("encodeStages") { try CatalogCodec.encode(full.freshStages) }
+        let stages = try time("decodeStages(\(stagesData.count) bytes)") { try CatalogCodec.decode(PreparedStages?.self, from: stagesData) }
+        let reused = try time("fullPreparedWithStages") { try PreparedCatalog(channels: channels, programs: programs, activeSources: [source], overrides: [:], stages: stages) }
+        #expect(reused.freshStages == nil)
+        let matchesData = try time("encodeGuideMatches") { try CatalogCodec.encode(mappings.matches) }
         _ = try time("decodeGuideMatches(\(mappings.matches.count))") { try CatalogCodec.decode([String: GuideMatch].self, from: matchesData) }
+        let metadataData = try time("encodeMetadata") { try CatalogCodec.encode(directory.metadata) }
+        _ = try time("decodeMetadata(\(directory.metadata.count), \(metadataData.count) bytes)") { try CatalogCodec.decode([String: ChannelMetadata].self, from: metadataData) }
     }
 }

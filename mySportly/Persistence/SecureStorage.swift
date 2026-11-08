@@ -94,6 +94,22 @@ actor CatalogCache {
     func removeLaunchSnapshot() {
         try? FileManager.default.removeItem(at: directory.appending(path: "launch.sealed"))
     }
+    func savePreparedStages(_ stages: PreparedStages) throws {
+        try prepare()
+        let sealed = try AES.GCM.seal(CatalogCodec.encode(stages), using: key())
+        guard let data = sealed.combined else { throw KeychainStore.SecureFailure.write }
+        try data.write(to: directory.appending(path: "stages.sealed"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+    /// Missing or unreadable stages mean the catalog is prepared from scratch.
+    func loadPreparedStages() -> PreparedStages? {
+        guard let data = try? Data(contentsOf: directory.appending(path: "stages.sealed")),
+              let box = try? AES.GCM.SealedBox(combined: data),
+              let key = try? key(), let plain = try? AES.GCM.open(box, using: key) else { return nil }
+        return try? CatalogCodec.decode(PreparedStages.self, from: plain)
+    }
+    func removePreparedStages() {
+        try? FileManager.default.removeItem(at: directory.appending(path: "stages.sealed"))
+    }
     func savePlaylist(_ text: String, sourceID: UUID) throws {
         try prepare()
         let sealed = try AES.GCM.seal(Data(text.utf8), using: key())

@@ -28,7 +28,7 @@ public struct ChannelAudience: Hashable, Sendable {
     }
 }
 
-public struct ChannelMetadata: Sendable {
+public struct ChannelMetadata: Codable, Hashable, Sendable {
     public var category: String
     public var language: String
     public var region: String

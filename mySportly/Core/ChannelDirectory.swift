@@ -44,7 +44,9 @@ public struct ChannelDirectory: Sendable {
     private let providerLabels: [String: String]
     public let nameGroups: CatalogGroupIndex
 
-    public init(channels: [Channel], overrides: [String: Data] = [:]) throws {
+    /// `resolvedMetadata` is the raw `ChannelMetadataResolver` output for these
+    /// channels (see `PreparedStages`); channels missing from it are resolved here.
+    public init(channels: [Channel], overrides: [String: Data] = [:], resolvedMetadata: [String: ChannelMetadata] = [:]) throws {
         let decoder = JSONDecoder()
         func value<T: Decodable>(_ channel: Channel, _ field: String, _ fallback: T) -> T {
             guard let data = overrides["channel.\(channel.id).\(field)"] else { return fallback }
@@ -76,7 +78,7 @@ public struct ChannelDirectory: Sendable {
             let hidden = value(channel, "hidden", false)
             let group = value(channel, "variants", [channel.id]).sorted().joined(separator: "|")
             let representative = !hidden && variants.insert(group).inserted
-            var details = resolver.resolve(channel)
+            var details = resolvedMetadata[channel.id] ?? resolver.resolve(channel)
             details.category = value(channel, "category", details.category)
             if details.category != ChannelCategory.sports.rawValue { details.sport = nil }
             details.language = LocalePreferences.languageCode(value(channel, "language", details.language))
@@ -203,9 +205,15 @@ public struct PreparedCatalog: Sendable {
     public let guideMappings: GuideMappingResolver
     public let playbackAlternatives: [String: [String]]
     public let query: CatalogQueryIndex
+    /// Set when any stage was recomputed instead of reused; save it for next time.
+    public let freshStages: PreparedStages?
 
-    public init(channels: [Channel], programs: [GuideProgram], activeSources: Set<UUID>, overrides: [String: Data], guideChannels: [GuideChannel] = []) throws {
-        directory = try ChannelDirectory(channels: channels.filter { activeSources.contains($0.sourceID) }, overrides: overrides)
+    public init(channels: [Channel], programs: [GuideProgram], activeSources: Set<UUID>, overrides: [String: Data], guideChannels: [GuideChannel] = [], stages: PreparedStages? = nil) throws {
+        let active = channels.filter { activeSources.contains($0.sourceID) }
+        let metadataFingerprint = PreparedStages.metadataFingerprint(active)
+        let reuseMetadata = stages?.metadataFingerprint == metadataFingerprint
+        let resolved = try reuseMetadata ? stages?.metadata ?? [:] : PreparedStages.resolveMetadata(active)
+        directory = try ChannelDirectory(channels: active, overrides: overrides, resolvedMetadata: resolved)
         channelsByID = Dictionary(uniqueKeysWithValues: directory.channels.map { ($0.id, $0) })
         var guide: [String: [GuideProgram]] = [:]
         var ids: [UUID: Set<String>] = [:]
@@ -217,7 +225,15 @@ public struct PreparedCatalog: Sendable {
         for key in guide.keys { try Task.checkCancellation(); guide[key]?.sort { $0.start < $1.start } }
         self.guide = guide
         self.guideIDs = ids.mapValues { $0.sorted() }
-        guideMappings = try GuideMappingResolver(channels: directory.channels, guideIDs: self.guideIDs, guideChannels: guideChannels, metadata: directory.metadata)
+        let guideFingerprint = PreparedStages.guideFingerprint(channels: directory.channels, metadata: directory.metadata, guideIDs: self.guideIDs, guideChannels: guideChannels)
+        let reuseGuide = stages?.guideFingerprint == guideFingerprint
+        if reuseGuide, let stages {
+            guideMappings = GuideMappingResolver(matches: stages.guideMatches, ambiguous: stages.ambiguousGuideMatches)
+        } else {
+            guideMappings = try GuideMappingResolver(channels: directory.channels, guideIDs: self.guideIDs, guideChannels: guideChannels, metadata: directory.metadata)
+        }
+        freshStages = reuseMetadata && reuseGuide ? nil : PreparedStages(metadataFingerprint: metadataFingerprint, metadata: resolved, guideFingerprint: guideFingerprint,
+                                                                        guideMatches: guideMappings.matches, ambiguousGuideMatches: guideMappings.ambiguous)
         playbackAlternatives = PlaybackAlternatives.groups(directory.lineup)
         query = try CatalogQueryIndex(channels: directory.lineup, programs: programs, overrides: overrides, metadata: directory.metadata, guideMatches: guideMappings.matches)
     }

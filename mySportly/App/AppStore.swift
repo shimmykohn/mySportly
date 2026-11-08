@@ -49,6 +49,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     @ObservationIgnored private var preparationID = UUID()
     @ObservationIgnored private var queryIndexTask: Task<Void, Never>?
     @ObservationIgnored private var launchSnapshotTask: Task<Void, Never>?
+    @ObservationIgnored private var preparedStages: PreparedStages?
+    @ObservationIgnored private var stagesSaveTask: Task<Void, Never>?
     @ObservationIgnored private let catalogLifetime = CatalogSnapshotLifetime()
     @ObservationIgnored private var widgetTask: Task<Void, Never>?
     @ObservationIgnored private var intentCatalogTask: Task<Void, Never>?
@@ -97,9 +99,11 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private var attemptedRestores = Set<UUID>()
 
     init(inMemory: Bool = false, registerBackground: Bool = false) {
-        let processStart = ContinuousClock.now
+        let created = ContinuousClock.now, createdWall = Date()
         personal = PersonalStore(inMemory: inMemory)
+        let processStart = LaunchTimeline.processStartDate().map { LaunchTimeline.instant(for: $0, now: created, wallNow: createdWall) } ?? created
         launchTimeline.mark(.processStart, at: processStart)
+        launchTimeline.mark(.storeCreated, at: created)
         selectedTab = AppTab(rawValue: personal.value("preferences.startTab", default: "Live")) ?? .live
         playback.quality = StreamQuality(rawValue: personal.value("preferences.streamQuality", default: "Auto")) ?? .automatic
         playback.onFailure = { [weak self] in self?.offerAlternate() }
@@ -228,6 +232,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         launchSignposter.endInterval("catalogLoad", catalogLoad)
         launchTimeline.mark(.catalogDecoded)
         let prepare = launchSignposter.beginInterval("prepare")
+        preparedStages = await cache.loadPreparedStages()
         rebuild(force: true)
         await waitForCatalog()
         launchSignposter.endInterval("prepare", prepare)
@@ -359,11 +364,11 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         organizationRevision = -1
         let id = UUID(); preparationID = id
         preparingCatalog = true
-        let channels = catalog.channels, programs = catalog.programs, overrides = personal.snapshotValues(), guideChannels = catalog.guideChannels
+        let channels = catalog.channels, programs = catalog.programs, overrides = personal.snapshotValues(), guideChannels = catalog.guideChannels, stages = preparedStages
         queryIndexTask = Task { [weak self] in
             do {
                 let prepared = try await catalogWork {
-                    try PreparedCatalog(channels: channels, programs: programs, activeSources: active, overrides: overrides, guideChannels: guideChannels)
+                    try PreparedCatalog(channels: channels, programs: programs, activeSources: active, overrides: overrides, guideChannels: guideChannels, stages: stages)
                 }
                 guard !Task.isCancelled, let self, self.preparationID == id else { return }
                 self.directory = prepared.directory
@@ -383,13 +388,14 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                 if self.launchTimeline.milliseconds(to: .catalogPrepared) == nil {
                     self.launchTimeline.mark(.catalogPrepared)
                     #if DEBUG
-                    print("[Launch] " + self.launchTimeline.summary)
+                    print("[Launch] " + self.launchTimeline.summary + " channels=\(channels.count) listings=\(programs.count)")
                     #endif
                 }
                 self.matchSportsGames()
                 self.updateWidgetSnapshot()
                 self.updateIntentCatalog()
                 self.saveLaunchSnapshot(prepared, overrides: overrides)
+                if let fresh = prepared.freshStages { self.savePreparedStages(fresh) }
                 await self.catalogLifetime.retain(prepared, revision: self.queryRevision)
             } catch {
                 guard let self, self.preparationID == id else { return }
@@ -417,6 +423,20 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                 return LaunchSnapshot(prepared: prepared, recentIDs: recentIDs, manualGuideIDs: manual, now: .now)
             }) else { return }
             try? await cache.saveLaunchSnapshot(snapshot)
+        }
+    }
+
+    /// Reused by later rebuilds at once; written to disk for the next launch.
+    private func savePreparedStages(_ stages: PreparedStages) {
+        guard !demo else { return }
+        preparedStages = stages
+        stagesSaveTask?.cancel()
+        let cache = cache
+        guard !sources.isEmpty else { stagesSaveTask = Task { await cache.removePreparedStages() }; return }
+        stagesSaveTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            try? await cache.savePreparedStages(stages)
         }
     }
 
