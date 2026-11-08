@@ -69,11 +69,12 @@ actor CatalogCache {
     func load() throws -> CatalogSnapshot {
         let file = directory.appending(path: "catalog.sealed")
         guard FileManager.default.fileExists(atPath: file.path) else { return CatalogSnapshot() }
-        return try JSONDecoder().decode(CatalogSnapshot.self, from: AES.GCM.open(AES.GCM.SealedBox(combined: Data(contentsOf: file)), using: key()))
+        let sealed = try AES.GCM.SealedBox(combined: Data(contentsOf: file))
+        return try CatalogCodec.decode(CatalogSnapshot.self, from: AES.GCM.open(sealed, using: key()))
     }
     func save(_ snapshot: CatalogSnapshot) throws {
         try prepare()
-        let sealed = try AES.GCM.seal(JSONEncoder().encode(snapshot), using: key())
+        let sealed = try AES.GCM.seal(CatalogCodec.encode(snapshot), using: key())
         guard let data = sealed.combined else { throw KeychainStore.SecureFailure.write }
         try data.write(to: directory.appending(path: "catalog.sealed"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
