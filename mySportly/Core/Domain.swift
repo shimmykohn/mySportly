@@ -77,6 +77,12 @@ public struct CatalogSnapshot: Codable, Sendable {
         guideChannels = try values.decodeIfPresent([GuideChannel].self, forKey: .guideChannels) ?? []
         guideURLs = try values.decodeIfPresent([UUID: URL].self, forKey: .guideURLs) ?? [:]
     }
+    /// Keeps listings that have not ended and start within `horizon`. Ended
+    /// listings dominate a saved guide and are never shown.
+    public mutating func pruneGuide(now: Date, horizon: TimeInterval = 3 * 86_400) {
+        let limit = now + horizon
+        programs.removeAll { $0.end <= now || $0.start >= limit }
+    }
     public mutating func replace(sourceID: UUID, channels: [Channel], programs: [GuideProgram]?, guideChannels: [GuideChannel] = [], at date: Date = .now) {
         self.channels.removeAll { $0.sourceID == sourceID }
         var seen = Set<String>()

@@ -196,7 +196,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         #endif
         Task { await sportsData.load() }
         let catalogLoad = launchSignposter.beginInterval("catalogLoad")
-        do { catalog = try await cache.load() }
+        do { catalog = try await cache.load(); catalog.pruneGuide(now: .now) }
         catch { inform("Saved catalog unavailable", "Your personal choices are safe. Refresh your sources to restore the local catalog.") }
         launchSignposter.endInterval("catalogLoad", catalogLoad)
         launchTimeline.mark(.catalogDecoded)
@@ -478,6 +478,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                         next.replace(sourceID: source.id, channels: result.channels, programs: result.programs, guideChannels: result.guideChannels)
                         next.guideURLs[source.id] = result.guideURL
                     }
+                    next.pruneGuide(now: .now)
                     return next
                 }
                 try await cache.save(next)
@@ -534,6 +535,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             catalog.refreshed.removeValue(forKey: source.id)
             catalog.guideRefreshed.removeValue(forKey: source.id)
             catalog.guideURLs.removeValue(forKey: source.id)
+            catalog.pruneGuide(now: .now)
             try await cache.save(catalog); try await cache.removePlaylist(source.id); rebuild(force: true)
             await waitForCatalog()
         } catch { inform("Source removal", safeError(error)) }

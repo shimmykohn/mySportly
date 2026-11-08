@@ -3,6 +3,28 @@ import Testing
 @testable import SportlyCore
 
 @Suite struct CatalogTests {
+    @Test func pruneDropsEndedAndFarFutureListings() {
+        let source = UUID(), now = Date(timeIntervalSince1970: 1_800_000_000)
+        func program(_ id: String, _ start: TimeInterval, _ end: TimeInterval) -> GuideProgram {
+            GuideProgram(id: id, sourceID: source, guideID: "g", title: id, start: now + start, end: now + end)
+        }
+        var snapshot = CatalogSnapshot()
+        snapshot.programs = [program("ended", -3600, -1), program("endsNow", -3600, 0), program("live", -60, 1800),
+                             program("twoDays", 2 * 86_400, 2 * 86_400 + 1800), program("fourDays", 4 * 86_400, 4 * 86_400 + 1800)]
+        snapshot.pruneGuide(now: now)
+        #expect(snapshot.programs.map(\.id) == ["live", "twoDays"])
+    }
+
+    @Test func pruneKeepsGuideRefreshTimestamps() {
+        let source = UUID(), now = Date(timeIntervalSince1970: 1_800_000_000)
+        var snapshot = CatalogSnapshot()
+        snapshot.guideRefreshed = [source: now - 600]
+        snapshot.programs = [GuideProgram(id: "ended", sourceID: source, guideID: "g", title: "x", start: now - 7200, end: now - 3600)]
+        snapshot.pruneGuide(now: now)
+        #expect(snapshot.programs.isEmpty)
+        #expect(snapshot.guideRefreshed == [source: now - 600])
+    }
+
     let source = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
 
     @Test func parsesQuotedMetadataAndPreservesVariants() throws {
