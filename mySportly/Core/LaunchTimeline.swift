@@ -1,7 +1,7 @@
 import Foundation
 
 public enum LaunchPhase: String, CaseIterable, Sendable {
-    case processStart, snapshotLoaded, firstInteractive, catalogDecoded, catalogPrepared
+    case processStart, loadStarted, snapshotLoaded, firstInteractive, catalogDecoded, catalogPrepared
 }
 
 /// Wall-clock launch milestones, measured from `processStart`. The first mark
@@ -17,6 +17,13 @@ public struct LaunchTimeline: Sendable {
     public func milliseconds(to phase: LaunchPhase) -> Int? {
         guard let start = marks[.processStart], let end = marks[phase] else { return nil }
         let duration = end - start
+        return Int(duration.components.seconds * 1000) + Int(duration.components.attoseconds / 1_000_000_000_000_000)
+    }
+
+    /// Milliseconds from `processStart` to an arbitrary instant (diagnostics).
+    public func milliseconds(at instant: ContinuousClock.Instant) -> Int {
+        guard let start = marks[.processStart] else { return -1 }
+        let duration = instant - start
         return Int(duration.components.seconds * 1000) + Int(duration.components.attoseconds / 1_000_000_000_000_000)
     }
 

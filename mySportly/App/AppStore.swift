@@ -191,11 +191,22 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
 
     func load() async {
         guard !loaded else { return }; loaded = true
+        launchTimeline.mark(.loadStarted)
         if ProcessInfo.processInfo.arguments.contains("--demo") { await loadDemo(); loading = false; catalogReady = true; routingReady = true; AppRouteInbox.consume(using: self); return }
         #if DEBUG
         do {
             if try intelligence.importDevelopmentCredential() { try personal.set("preferences.cloudAI", true) }
         } catch { inform("Jev setup", "The key could not be saved in this device’s Keychain.") }
+        #endif
+        #if DEBUG
+        if SyntheticCatalogSeed.requested, !personal.has("source.\(SyntheticCatalogSeed.sourceID)") {
+            let seed = SyntheticCatalogSeed.snapshot()
+            try? await cache.save(seed)
+            try? personal.set("source.\(SyntheticCatalogSeed.sourceID)", SyntheticCatalogSeed.source)
+            try? personal.set("setup.complete", true)
+            for index in [0, 3, 6, 9, 12] { try? personal.set("channel.seed.\(index).favorite", true) }
+            print("[Launch] seeded synthetic catalog")
+        }
         #endif
         Task { await sportsData.load() }
         // First frame: the small launch snapshot. The full catalog, cloud
@@ -203,6 +214,9 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         let snapshotRead = launchSignposter.beginInterval("snapshot")
         let snapshot = await cache.loadLaunchSnapshot()?.active(sources: Set(sources.map(\.id)), now: .now)
         launchSignposter.endInterval("snapshot", snapshotRead)
+        #if DEBUG
+        print("[Launch] snapshotReadDone=\(launchTimeline.milliseconds(at: .now)) channels=\(snapshot?.channels.count ?? -1)")
+        #endif
         if let snapshot, !snapshot.channels.isEmpty {
             apply(snapshot)
             launchTimeline.mark(.snapshotLoaded)
