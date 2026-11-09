@@ -15,8 +15,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     #endif
     let personal: PersonalStore
     let playback = PlaybackController()
-    let intelligence = IntelligenceService()
-    let organization = OrganizationProgress()
+    let openAI = OpenAIService()
     let sportsData = SportsDataStore()
     private(set) var gameLinks: [String: [SportsFeedLink]] = [:]
     /// Home's games; restored from the launch snapshot, replaced by guide matching.
@@ -72,7 +71,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     var clock = Date.now
     private(set) var importProgress: SourceImportProgress?
     var importingSource: UUID?
-    var organizerProgress: String? { organization.isRunning ? organization.countLabel : nil }
     var suggestions: [ChannelSuggestion] = []
     private(set) var suggestionRevision = 0
     private(set) var variantGroups: [[String]] = []
@@ -185,11 +183,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         launchTimeline.mark(.loadStarted)
         if ProcessInfo.processInfo.arguments.contains("--demo") { await loadDemo(); loading = false; catalogReady = true; routingReady = true; AppRouteInbox.consume(using: self); return }
         #if DEBUG
-        do {
-            if try intelligence.importDevelopmentCredential() { try personal.set("preferences.cloudAI", true) }
-        } catch { inform("Jev setup", "The key could not be saved in this device’s Keychain.") }
-        #endif
-        #if DEBUG
         if SyntheticCatalogSeed.requested, !personal.has("source.\(SyntheticCatalogSeed.sourceID)") {
             let seed = SyntheticCatalogSeed.snapshot()
             try? await cache.save(seed)
@@ -228,17 +221,14 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         let restoreState = launchSignposter.beginInterval("restoreState")
         let revision = personal.revision
         await personal.refreshCloudStatus()
-        await organization.restore()
         if personal.revision != revision { rebuild() }
         launchSignposter.endInterval("restoreState", restoreState)
         runFollowMigration()
+        organizeInBackground()
         await restoreMissingSources()
         routingReady = true
         AppRouteInbox.consume(using: self)
-        #if DEBUG
-        await DevelopmentGroupAudit.runIfRequested(store: self)
-        #endif
-        if backgroundRefresh.registered && UIApplication.shared.applicationState == .active && !ProcessInfo.processInfo.arguments.contains("--group-audit") {
+        if backgroundRefresh.registered && UIApplication.shared.applicationState == .active {
             Task { await self.refreshDueSources() }
         }
     }
@@ -351,9 +341,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         #endif
         rebuild(force: true)
         await waitForCatalog()
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--demo-organization-progress") { startDemoOrganization() }
-        #endif
     }
 
     // UI mutations only enqueue work. The immutable snapshot is built away from
@@ -362,7 +349,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         let active = Set(sources.map(\.id))
         if importRequiresExistingSource, let importingSource, !active.contains(importingSource) { cancelImport() }
         if let source = playback.channel?.sourceID, !active.contains(source) { playback.stop() }
-        if !personal.value("preferences.cloudAI", default: false) { cancelOrganization() }
         guard force || requestedPersonalRevision != personal.catalogRevision else { return }
         requestedPersonalRevision = personal.catalogRevision
         queryIndexTask?.cancel()
@@ -400,6 +386,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                 self.matchSportsGames()
                 self.saveLaunchSnapshot()
                 if let fresh = prepared.freshStages { self.savePreparedStages(fresh) }
+                self.organizeInBackground()
                 await self.catalogLifetime.retain(prepared, revision: self.queryRevision)
             } catch {
                 guard let self, self.preparationID == id else { return }
@@ -793,93 +780,47 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         }
     }
     func waitForOrganization() async { await organizationPreparation?.value }
-    /// Processes a bounded set and checkpoints every batch. Browsing never
-    /// awaits this task, and another run only picks up new/changed groups.
-    func organizeGroups(limit: Int = 40, selecting groupIDs: Set<String>? = nil) {
-        guard organizeTask == nil, !organization.isRunning, let groups = directory?.nameGroups else { return }
-        guard personal.value("preferences.cloudAI", default: false) else {
-            inform("Cloud processing is off", "Enable Jev in Organizer to classify shared channel titles."); return
+    var isOrganizing: Bool { organizeTask != nil }
+    /// Sorts new or changed channel groups into categories with the user's
+    /// OpenAI key, quietly, up to 400 groups per request. Only the preferred
+    /// audience is sent. Unchanged groups are never resent; results are saved
+    /// as `taxonomy.placement.*` and sync like other personal choices.
+    func organizeInBackground() {
+        guard organizeTask == nil, catalogReady, !demo, let model = openAI.groupModel(), let groups = directory?.nameGroups else { return }
+        let audience = organizationAudience
+        let pending = groups.pending(in: audience).filter { group in
+            let saved: GroupPlacement? = personal.value("taxonomy.placement.\(group.id)", default: nil)
+            return saved?.isReusable(for: group) != true
         }
-        let candidates = groups.pending(in: organizationAudience)
-        let inputs = Array(candidates.filter { groupIDs?.contains($0.id) ?? true }.prefix(max(0, min(limit, 100_000))))
-        guard !inputs.isEmpty else { return }
-        startOrganization(GroupOrganizationRun(groupIDs: inputs.map(\.id)))
-    }
-    func resumeOrganization() {
-        guard organizeTask == nil, !organization.isRunning, let run = organization.run else { return }
-        #if DEBUG
-        if demo, ProcessInfo.processInfo.arguments.contains("--demo-organization-progress") { startDemoOrganization(run); return }
-        #endif
-        startOrganization(run)
-    }
-    private func startOrganization(_ run: GroupOrganizationRun) {
-        guard personal.value("preferences.cloudAI", default: false), intelligence.jevConfigured else {
-            inform("Connect Jev", "Enable Jev in AI settings before continuing."); return
-        }
-        guard !organizationPaths.isEmpty else {
-            inform("Choose your categories", "Add the category choices you want in AI settings before organizing."); return
-        }
-        do { try organization.prepare(run, persist: !demo) }
-        catch { inform("Progress could not be saved", safeError(error)); return }
-        organization.beginBackgroundWork(start: { [weak self] in self?.performOrganization() }, expired: { [weak self] in
-            self?.cancelOrganization(message: "Stopped by iOS or the Live Activity. Completed groups are saved.")
-        })
-    }
-    private func performOrganization() {
-        guard organizeTask == nil, organization.isRunning else { return }
-        organizeTask = Task {
-            defer { organizeTask = nil; rebuild() }
+        guard !pending.isEmpty else { return }
+        let taxonomy = personal.has("preferences.organizationPaths") ? GroupTaxonomy(paths: organizationPaths) : groups.taxonomy
+        organizeTask = Task { [weak self] in
+            defer { self?.organizeTask = nil }
             do {
-                let model = try intelligence.jevModel()
-                let namer = AppleCloudGroupNamer(enabled: intelligence.pccConfigured)
-                while let run = organization.run, !run.isComplete {
+                for start in stride(from: 0, to: pending.count, by: Decisions.maxQuestions) {
+                    let batch = Array(pending[start..<min(start + Decisions.maxQuestions, pending.count)])
+                    let result = try await GroupOrganizationPipeline.classify(batch, taxonomy: taxonomy, model: model)
+                    guard let self else { return }
                     try Task.checkCancellation()
-                    guard personal.value("preferences.cloudAI", default: false) else { throw CancellationError() }
-                    await waitForCatalog()
-                    guard let groups = directory?.nameGroups else { throw CancellationError() }
-                    let ids = Array(run.remainingIDs.prefix(32))
-                    let audience = organizationAudience
-                    let batch = ids.compactMap { groups.byID[$0] }.filter { group in
-                        guard audience.includes(language: group.language, region: group.region) else { return false }
-                        let saved: GroupPlacement? = personal.value("taxonomy.placement.\(group.id)", default: nil)
-                        return saved?.isReusable(for: group) != true
-                    }
-                    let pendingIDs = Set(batch.map(\.id))
-                    try organization.checkpoint(ids.filter { !pendingIDs.contains($0) }, persist: !demo)
-                    if batch.isEmpty { continue }
-                    let taxonomy = personal.has("preferences.organizationPaths") ? GroupTaxonomy(paths: organizationPaths) : groups.taxonomy
-                    let result = try await GroupOrganizationPipeline.classify(batch, taxonomy: taxonomy, model: model, namer: namer)
-                    try Task.checkCancellation()
-                    guard personal.value("preferences.cloudAI", default: false) else { throw CancellationError() }
-                    await waitForCatalog()
+                    await self.waitForCatalog()
                     var updates: [String: Data?] = [:]
-                    var checked: [String] = []
                     for placement in result {
-                        guard let current = directory?.nameGroups.byID[placement.id], organizationAudience.includes(language: current.language, region: current.region) else {
-                            checked.append(placement.id); continue
-                        }
-                        // A changed provider context is checked with fresh inputs on the next batch.
-                        guard current.fingerprint == placement.fingerprint else { continue }
-                        // A manual correction arriving while a request is in flight wins.
+                        // A changed group or a manual correction made meanwhile wins.
+                        guard let current = self.directory?.nameGroups.byID[placement.id], current.fingerprint == placement.fingerprint else { continue }
                         let key = "taxonomy.placement.\(placement.id)"
-                        let existing: GroupPlacement? = personal.value(key, default: nil)
-                        checked.append(placement.id)
+                        let existing: GroupPlacement? = self.personal.value(key, default: nil)
                         if existing?.isReusable(for: current) == true { continue }
                         updates[key] = try JSONEncoder().encode(placement)
                     }
-                    if !updates.isEmpty { try personal.write(updates) }
-                    // Decisions are durable before advancing the local run cursor.
-                    try organization.checkpoint(checked, persist: !demo)
+                    if !updates.isEmpty { try self.personal.write(updates); self.rebuild() }
                 }
-                try organization.finish(persist: !demo)
-            } catch is CancellationError {
-                if organization.isRunning { organization.pause() }
+                self?.openAI.succeeded()
             } catch {
-                organization.pause("Completed groups are saved. Resume when ready.")
-                inform("Organization paused", safeError(error))
+                self?.openAI.report(error)
             }
         }
     }
+    func waitForGroupOrganization() async { await organizeTask?.value }
     func setGroupPath(_ group: CatalogNameGroup, path: [String]) {
         guard !path.isEmpty, path.count <= 4, path.allSatisfy(GroupNames.validLabel) else {
             inform("Check the category name", "Use up to four short category names, separated by /. Each name can contain letters, numbers, spaces, an apostrophe, an ampersand, or a hyphen."); return
@@ -894,38 +835,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         } catch { inform("Correction could not be saved", safeError(error)) }
     }
     func retryGroup(_ group: CatalogNameGroup) { remove("taxonomy.placement.\(group.id)") }
-    func cancelOrganization(message: String = "Progress saved. Resume when ready.") {
-        organizeTask?.cancel()
-        if organization.isRunning { organization.pause(message) }
-    }
-    func organizationEnteredBackground() {
-        if organization.isRunning && !organization.backgroundActive { cancelOrganization() }
-    }
-    func waitForGroupOrganization() async {
-        while organization.isRunning && organizeTask == nil { try? await Task.sleep(for: .milliseconds(50)) }
-        await organizeTask?.value
-    }
-    #if DEBUG
-    /// Exercises Apple's actual background execution and Live Activity on a
-    /// physical device using labeled sample work, with no cloud model requests.
-    private func startDemoOrganization(_ saved: GroupOrganizationRun? = nil) {
-        let run = saved ?? GroupOrganizationRun(groupIDs: (0..<40).map { "sample-group-\($0)" })
-        try? organization.prepare(run, persist: false)
-        organization.beginBackgroundWork(start: { [weak self] in
-            guard let self else { return }
-            self.organizeTask = Task {
-                defer { self.organizeTask = nil }
-                do {
-                    for id in run.remainingIDs {
-                        try await Task.sleep(for: .seconds(3))
-                        try self.organization.checkpoint([id], persist: false)
-                    }
-                    try self.organization.finish(persist: false)
-                } catch { if self.organization.isRunning { self.organization.pause() } }
-            }
-        }, expired: { [weak self] in self?.cancelOrganization() })
-    }
-    #endif
+    func cancelOrganization() { organizeTask?.cancel() }
     func applySuggestions(_ selected: [ChannelSuggestion], includeVariants: Bool) {
         do {
             var changes: [String: Data?] = [:]

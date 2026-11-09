@@ -15,7 +15,7 @@ final class mySportlyUITests: XCTestCase {
         capture("Home", app: app)
         app.buttons["home-profile"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
-        let rows = ["Sources", "Region and Language", "Appearance", "Sync Personal Choices", "AI"]
+        let rows = ["Sources", "Region and Language", "Appearance", "Sync Personal Choices", "OpenAI"]
         for row in rows { XCTAssertTrue(app.descendants(matching: .any)[row].firstMatch.exists, "Missing Settings row: \(row)") }
         for removed in ["Automatic Refresh", "Interests and Sports", "Sports Data", "Where Data Comes From", "Open To", "Use Viewing History", "Manage Recordings"] {
             XCTAssertFalse(app.descendants(matching: .any)[removed].firstMatch.exists, "Settings still shows \(removed)")

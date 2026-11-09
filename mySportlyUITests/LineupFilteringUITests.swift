@@ -2,7 +2,7 @@ import XCTest
 import UIKit
 
 @MainActor final class LineupFilteringUITests: XCTestCase {
-    func testNativeLineupFilterIsSharedWithSearch() {
+    func testNativeGuideLineupFilter() {
         continueAfterFailure = false
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
         let app = XCUIApplication()
@@ -15,19 +15,6 @@ import UIKit
         assertValue(count, "7")
         app.selectLineup("Unclassified")
         assertValue(count, "1")
-        app.selectLineup("My Lineup")
-        assertValue(count, "4")
-        app.selectMainTab("Search")
-        let field = app.searchFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.tap(); field.typeText("now")
-        let matches = app.staticTexts["search-result-count"].firstMatch
-        assertValue(matches, "4")
-        if app.keyboards.count > 0 { field.typeText("\n") }
-        app.selectLineup("All Channels")
-        assertValue(matches, "7")
-        app.selectMainTab("Guide")
-        assertValue(count, "7")
         app.selectLineup("My Lineup")
         assertValue(count, "4")
         capture("Native preferred lineup")

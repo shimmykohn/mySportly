@@ -77,37 +77,6 @@ import XCTest
         } catch CatalogError.tooLarge { }
     }
 
-    func testJevCredentialAndGroupedChoice() async throws {
-        let service = IntelligenceService()
-        _ = try service.importDevelopmentCredential()
-        try XCTSkipUnless(service.jevConfigured, "The personal Jev key has not been installed on this device.")
-        let channels = SampleCatalog.snapshot().channels.filter { $0.group == "Sports" }
-        let directory = try ChannelDirectory(channels: channels)
-        let group = try XCTUnwrap(directory.nameGroups.groups.first)
-        let input = GroupDecisionInput(group: group, parent: [], choices: directory.nameGroups.taxonomy.children(of: []))
-        let result = try await service.jevModel().choose([input])
-        let answer = try XCTUnwrap(result[group.id])
-        XCTAssertEqual(answer.choice, TaxonomyNode.id(for: ["Sports"]), "Explicit Sports metadata should choose the Sports category")
-        print("JEV_DEVICE_VERIFIED response=valid confidence=\(answer.confidence)")
-    }
-
-    func testJevGroupPipelineCheckpointsInMemory() async throws {
-        let store = AppStore(inMemory: true)
-        await store.loadDemo()
-        try XCTSkipUnless(store.intelligence.jevConfigured, "A personal Jev key is required for this explicit integration test.")
-        store.set("preferences.cloudAI", true)
-        store.organizeGroups()
-        await store.waitForGroupOrganization(); await store.waitForCatalog()
-        let placements = CatalogGroupIndex.savedPlacements(store.personal.snapshotValues())
-        XCTAssertNil(store.notice, store.notice?.message ?? "")
-        XCTAssertFalse(placements.isEmpty)
-        let count = placements.count
-        store.organizeGroups(); await store.waitForGroupOrganization()
-        XCTAssertEqual(CatalogGroupIndex.savedPlacements(store.personal.snapshotValues()).count, count)
-        XCTAssertTrue(store.directory?.nameGroups.pending(in: store.audience).isEmpty == true)
-        print("JEV_PIPELINE_VERIFIED groups=\(count) classified=\(placements.values.filter { $0.status == .classified }.count) review=\(placements.values.filter { $0.status != .classified }.count)")
-    }
-
     func testPublicHLSSampleActuallyPlays() async throws {
         let channel = try XCTUnwrap(SampleCatalog.snapshot().channels.first)
         let playback = PlaybackController()

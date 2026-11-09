@@ -14,7 +14,7 @@ struct SettingsView: View {
                 if store.personal.syncChangeNeedsRelaunch { Label("Takes effect the next time you open the app.", systemImage: "info.circle").font(.footnote) }
                 Text(store.personal.cloudStatus).foregroundStyle(.secondary)
             }
-            Section { NavigationLink { AISettingsView() } label: { Label("AI", systemImage: "sparkles") }.accessibilityIdentifier("ai-settings") }
+            Section { NavigationLink { OpenAIKeyView() } label: { Label("OpenAI", systemImage: "sparkles") }.accessibilityIdentifier("openai-settings") }
         }
         .navigationTitle("Settings")
     }

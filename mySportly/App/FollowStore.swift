@@ -55,3 +55,12 @@ extension AppStore {
     }
     func logo(for item: SportsLibraryItem) -> URL? { sportsData.index.logo(for: item) }
 }
+
+extension AppStore {
+    var recentSearches: [String] { personal.value("search.recent", default: [String]()) }
+    func addRecentSearch(_ query: String) {
+        let updated = RecentSearches.adding(query, to: recentSearches)
+        if updated != recentSearches { set("search.recent", updated) }
+    }
+    func clearRecentSearches() { set("search.recent", [String]()) }
+}

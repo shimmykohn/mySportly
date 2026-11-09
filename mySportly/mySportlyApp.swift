@@ -15,7 +15,6 @@ import Combine
                 .onOpenURL { AppRouteInbox.queue($0); AppRouteInbox.consume(using: store) }
                 .onChange(of: phase) { _, phase in
                     if phase == .background {
-                        store.organizationEnteredBackground()
                         store.scheduleSourceRefresh()
                     }
                     if phase == .active {
@@ -23,6 +22,8 @@ import Combine
                         Task {
                             guard store.catalogReady else { return }
                             store.matchSportsGames()
+                            store.openAI.foregrounded()
+                            store.organizeInBackground()
                             let revision = store.personal.revision
                             await store.personal.refreshCloudStatus()
                             if store.personal.revision != revision { store.rebuild() }

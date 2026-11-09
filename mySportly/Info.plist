@@ -5,9 +5,8 @@
 	<key>CFBundleURLTypes</key>
 	<array><dict><key>CFBundleURLSchemes</key><array><string>mysportly</string></array></dict></array>
 	<key>SportlyCloudEnabled</key><true/>
-	<key>SportlyPCCEnabled</key><false/>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array><string>app.iska.mysportly.organize.*</string><string>app.iska.mysportly.source-refresh</string></array>
+	<array><string>app.iska.mysportly.source-refresh</string></array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- User-entered providers can require HTTP. Adding a fine-grained ATS

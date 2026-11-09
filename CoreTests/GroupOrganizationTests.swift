@@ -61,13 +61,16 @@ import Testing
     @Test func batchPromptContainsNoStreamAddressesAndHasExplicitNone() throws {
         let group = try #require(grouped([channel("a", "Golf 01 https://private.invalid/user/password", group: "Sports")]).groups.first)
         let input = GroupDecisionInput(group: group, parent: [], choices: GroupTaxonomy(paths: [["Sports"], ["News"]]).children(of: []))
-        let request = try JevGroupModel.request([input])
-        let json = String(decoding: try JSONEncoder().encode(request), as: UTF8.self)
+        let questions = try OpenAIGroupModel.questions([input])
+        let json = String(decoding: try JSONEncoder().encode(DecisionsRequest(input: "test", questions: questions)), as: UTF8.self)
         #expect(!json.contains("private.invalid"))
         #expect(!json.contains("password"))
-        #expect(request.questions[group.id]?.criteria["none"] != nil)
-        #expect(request.questions[group.id]?.instructions.group.name == group.name)
-        #expect(request.questions[group.id]?.criteria["category: Sports"]?.contains("Sporting events") == true)
+        #expect(json.contains(#""type":"input_json""#))
+        #expect(json.contains(#""model":"gpt-6-luna""#))
+        let question = try #require(questions.first)
+        #expect(question.name == group.id)
+        #expect(question.choices.contains { $0.value == "none" })
+        #expect(question.choices.first { $0.value == "category: Sports" }?.description?.contains("Sporting events") == true)
     }
     @Test func hierarchicalChoicesAndNoneRoutingAreValidated() async throws {
         let group = try #require(grouped([channel("a", "Golf 01"), channel("b", "Golf 02")]).groups.first)
@@ -118,9 +121,29 @@ import Testing
     @Test func responseRejectsMissingAnswersAndUnknownChoices() throws {
         let group = try #require(grouped([channel("a", "ABC")]).groups.first)
         let input = GroupDecisionInput(group: group, parent: [], choices: GroupTaxonomy(paths: [["News"]]).children(of: []))
-        #expect(throws: GroupDecisionFailure.self) { try JevGroupModel.decode(Data(#"{"model":"jev","answers":{}}"#.utf8), inputs: [input]) }
-        let payload: [String: Any] = ["model":"jev", "answers": [group.id: ["type":"choice", "choice":"invented", "confidence":1, "probabilities":["invented":1]]]]
-        #expect(throws: GroupDecisionFailure.self) { try JevGroupModel.decode(JSONSerialization.data(withJSONObject: payload), inputs: [input]) }
+        let request = DecisionsRequest(input: "test", questions: try OpenAIGroupModel.questions([input]))
+        #expect(throws: DecisionsFailure.self) { try DecisionsClient.decode(Data(#"{"model":"gpt-6-luna","answers":[]}"#.utf8), for: request) }
+        let payload: [String: Any] = ["model": "gpt-6-luna", "answers": [["type": "choice", "name": group.id, "choice": "invented", "confidence": 1,
+                                                                       "probabilities": [["value": "invented", "probability": 1]]]]]
+        #expect(throws: DecisionsFailure.self) { try DecisionsClient.decode(JSONSerialization.data(withJSONObject: payload), for: request) }
+    }
+    @Test func refusedGroupIsLeftForReviewWhileOthersApply() async throws {
+        let index = try grouped([channel("1", "US CNN", group: "News"), channel("2", "Mystery feed", group: "")])
+        let news = try #require(index.groups.first { $0.name.contains("CNN") }), other = try #require(index.groups.first { !$0.name.contains("CNN") })
+        let taxonomy = GroupTaxonomy(paths: [["News"], ["Sports"]])
+        let inputs = [news, other].map { GroupDecisionInput(group: $0, parent: [], choices: taxonomy.children(of: [])) }
+        let request = DecisionsRequest(input: "test", questions: try OpenAIGroupModel.questions(inputs))
+        let payload: [String: Any] = ["model": "gpt-6-luna", "answers": [
+            ["type": "choice", "name": news.id, "choice": "category: News", "confidence": 0.9,
+             "probabilities": [["value": "category: News", "probability": 0.92], ["value": "category: Sports", "probability": 0.05], ["value": "none", "probability": 0.03]]],
+            ["type": "refusal", "name": other.id]]]
+        let answers = try DecisionsClient.decode(JSONSerialization.data(withJSONObject: payload), for: request)
+        let choices = OpenAIGroupModel.choices(answers, inputs: inputs)
+        #expect(choices[news.id]?.choice == TaxonomyNode.id(for: ["News"]))
+        #expect(choices[other.id] == nil)
+        let result = try await GroupOrganizationPipeline.classify([news, other], taxonomy: taxonomy, model: MapModel(answers: choices))
+        #expect(result.first { $0.id == news.id }?.status == .classified)
+        #expect(result.first { $0.id == other.id }?.status == .needsReview)
     }
     @Test func explicitSlotsKeepIdentityWhenEventNamesAndDatesChange() throws {
         let original = try grouped([channel("old", "US (NEWLEAGUE 02) | Red vs Blue (2026-10-18 18:00:00)", group: "Sports")])
@@ -161,9 +184,10 @@ import Testing
         let group = try #require(grouped([channel("1", "Unfamiliar television title", group: "")]).groups.first)
         let taxonomy = GroupTaxonomy(paths: [["Entertainment"], ["Documentary"]])
         let input = GroupDecisionInput(group: group, parent: [], choices: taxonomy.children(of: []))
-        let response: [String: Any] = ["model": "jev-1.13.0", "answers": [group.id: ["type": "choice", "choice": "category: Entertainment", "confidence": 0.2,
-            "probabilities": ["category: Entertainment": 0.36, "category: Documentary": 0.37, "none": 0.27]]]]
-        let answers = try JevGroupModel.decode(JSONSerialization.data(withJSONObject: response), inputs: [input])
+        let request = DecisionsRequest(input: "test", questions: try OpenAIGroupModel.questions([input]))
+        let response: [String: Any] = ["model": "gpt-6-luna", "answers": [["type": "choice", "name": group.id, "choice": "category: Entertainment", "confidence": 0.2,
+            "probabilities": [["value": "category: Entertainment", "probability": 0.36], ["value": "category: Documentary", "probability": 0.37], ["value": "none", "probability": 0.27]]]]]
+        let answers = OpenAIGroupModel.choices(try DecisionsClient.decode(JSONSerialization.data(withJSONObject: response), for: request), inputs: [input])
         let choice = try #require(answers[group.id])
         let result = try await GroupOrganizationPipeline.classify([group], taxonomy: taxonomy, model: FixedModel(choice: choice))
         #expect(result.first?.status == .needsReview)
@@ -209,4 +233,9 @@ private actor ScriptedModel: GroupDecisionModel {
 private actor TestNamer: GroupNameProposer {
     var calls = 0
     func propose(for group: CatalogNameGroup, under parent: [String]) async throws -> String? { calls += 1; return "Golf" }
+}
+
+private struct MapModel: GroupDecisionModel {
+    let answers: [String: GroupChoice]
+    func choose(_ inputs: [GroupDecisionInput]) async throws -> [String: GroupChoice] { answers.filter { key, _ in inputs.contains { $0.group.id == key } } }
 }
