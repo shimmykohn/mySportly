@@ -29,7 +29,12 @@ struct SearchScreen: View {
                         }
                     }
                 }
-                Section("Browse") { BrowseTiles(query: $query, destination: $destination).listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)) }
+                Section {
+                    BrowseTiles(query: $query, destination: $destination)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             } else if groups.isEmpty && searched == text {
                 ContentUnavailableView.search(text: text).accessibilityIdentifier("search-empty")
             } else {

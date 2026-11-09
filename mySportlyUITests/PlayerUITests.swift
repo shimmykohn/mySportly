@@ -7,7 +7,7 @@ import UIKit
         XCUIDevice.shared.orientation = .portrait
     }
 
-    func testPlayerOpensStepsMinimizesAndRestores() {
+    func testPlayerOpensMinimizesAndRestores() {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "--demo-home-follows"]
         app.launch()
@@ -24,9 +24,8 @@ import UIKit
         let before = title.value as? String ?? ""
         XCTAssertEqual(before, "sample.0")
         capture("Player portrait")
-        app.buttons["Next Channel"].tap()
-        let changed = NSPredicate { _, _ in title.exists && (title.value as? String ?? before) != before }
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: changed, evaluatedWith: nil)], timeout: 10), .completed, "Next Channel must change what is playing")
+        XCTAssertFalse(app.buttons["Next Channel"].exists, "The player has no channel stepping")
+        XCTAssertFalse(app.buttons["Previous Channel"].exists, "The player has no channel stepping")
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(title.waitForNonExistence(timeout: 5), "Landscape shows only the video")
         capture("Player landscape")

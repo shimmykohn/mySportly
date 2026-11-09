@@ -25,7 +25,9 @@ extension XCUIApplication {
     /// SwiftUI exposes compact tabs as buttons and the iPad sidebar as cells.
     @MainActor func selectMainTab(_ title: String, file: StaticString = #filePath, line: UInt = #line) {
         let button = buttons[title].firstMatch
-        if button.exists && button.isHittable {
+        // A sheet that is still dismissing covers the tab bar for a moment.
+        let hittable = NSPredicate { _, _ in button.exists && button.isHittable }
+        if XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: hittable, object: nil)], timeout: 3) == .completed {
             button.tap()
             return
         }

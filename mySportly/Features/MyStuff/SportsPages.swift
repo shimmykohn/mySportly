@@ -10,7 +10,7 @@ struct TeamPage: View {
             Section {
                 VStack(spacing: 12) {
                     SportsLogo(url: store.logo(for: team), size: 96)
-                    Text(team.name).font(.title2.bold()).multilineTextAlignment(.center)
+                    Text(team.name).font(.title3.bold()).multilineTextAlignment(.center)
                     let league = store.sportsData.index.leagueName(for: team)
                     if !league.isEmpty { Text(league).foregroundStyle(.secondary) }
                     FollowButton(item: team).buttonStyle(.borderedProminent)
@@ -42,7 +42,7 @@ struct LeaguePage: View {
             Section {
                 VStack(spacing: 12) {
                     SportsLogo(url: store.logo(for: league), size: 96)
-                    Text(league.name).font(.title2.bold())
+                    Text(league.name).font(.title3.bold())
                     FollowButton(item: league).buttonStyle(.borderedProminent)
                 }
                 .frame(maxWidth: .infinity)

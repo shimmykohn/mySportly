@@ -8,7 +8,7 @@ struct SetupView: View {
             List {
                 SourceImportProgressSection()
                 Section {
-                    Label("Live TV, your way", systemImage: "play.tv").font(.title2.bold())
+                    Label("Live TV, your way", systemImage: "play.tv").font(.title3.bold())
                     Text("Connect your source, choose what matters to you, and turn a crowded catalog into your own lineup.")
                 }
                 Section("Make It Yours") {
@@ -21,7 +21,7 @@ struct SetupView: View {
                     Button("Explore Sample Catalog", systemImage: "play.rectangle") { Task { await store.loadDemo(); store.showSetup = false } }
                 } footer: { Text("No mySportly account. Your provider connection stays in Keychain. iCloud uses your existing Apple Account when available.") }
             }
-            .navigationTitle("Welcome")
+            .navigationTitle("Welcome").toolbarTitleDisplayMode(.inline)
             .toolbar { if !store.sources.isEmpty || store.demo { ToolbarItem(placement: .confirmationAction) { Button("Done") { store.set("setup.complete", true); store.showSetup = false } } } }
         }
     }

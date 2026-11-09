@@ -6,17 +6,17 @@ struct ContentView: View {
     var body: some View {
         @Bindable var store = store
         TabView(selection: $store.selectedTab) {
-            Tab("Home", systemImage: "house", value: AppTab.home) { NavigationStack { HomeView() } }
-            Tab("Guide", systemImage: "list.bullet.rectangle", value: AppTab.guide) { NavigationStack { GuideView() } }
-            Tab("My Stuff", systemImage: "square.stack", value: AppTab.myStuff) { NavigationStack { MyStuffView() } }
-            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) { NavigationStack { SearchScreen() } }
+            Tab("Home", systemImage: "house", value: AppTab.home) { NavigationStack { HomeView().toolbarTitleDisplayMode(.inline) } }
+            Tab("Guide", systemImage: "list.bullet.rectangle", value: AppTab.guide) { NavigationStack { GuideView().toolbarTitleDisplayMode(.inline) } }
+            Tab("My Stuff", systemImage: "square.stack", value: AppTab.myStuff) { NavigationStack { MyStuffView().toolbarTitleDisplayMode(.inline) } }
+            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) { NavigationStack { SearchScreen().toolbarTitleDisplayMode(.inline) } }
         }
         .tabViewStyle(.sidebarAdaptable)
         .scrollEdgeEffectStyle(.soft, for: .top)
         .tabViewBottomAccessory(isEnabled: store.playback.channel != nil) { CompactPlayer() }
         .environment(\.playerNamespace, playerNamespace)
         .sheet(isPresented: $store.showSetup) { SetupView().scrollEdgeEffectStyle(.soft, for: .top).interactiveDismissDisabled(store.sources.isEmpty && !store.demo) }
-        .sheet(isPresented: $store.showSettings) { NavigationStack { SettingsView().toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { store.showSettings = false } } } }.scrollEdgeEffectStyle(.soft, for: .top) }
+        .sheet(isPresented: $store.showSettings) { NavigationStack { SettingsView().toolbarTitleDisplayMode(.inline).toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { store.showSettings = false } } } }.scrollEdgeEffectStyle(.soft, for: .top) }
         .fullScreenCover(isPresented: $store.showPlayer) {
             PlayerScreen().navigationTransition(.zoom(sourceID: store.playerSourceID ?? "player.accessory", in: playerNamespace))
         }

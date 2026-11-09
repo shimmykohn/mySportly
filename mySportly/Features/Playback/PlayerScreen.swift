@@ -33,7 +33,8 @@ struct CompactPlayer: View {
     }
 }
 
-/// Full-screen player: just the video and its controls. Swipe down to
+/// Full-screen player: the system video player (its own transport controls,
+/// per the HIG) with the title and live progress below. Swipe down to
 /// minimize; landscape on iPhone shows only the video.
 struct PlayerScreen: View {
     @Environment(AppStore.self) private var store
@@ -76,7 +77,7 @@ private struct PlayerDetails: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(store.playerTitle).font(.title2.bold()).lineLimit(2)
+                    Text(store.playerTitle).font(.headline).lineLimit(2)
                         .accessibilityIdentifier("player-title")
                         .accessibilityValue(Text(verbatim: playback.channel?.id ?? ""))
                     if !store.playerSubtitle.isEmpty { Text(store.playerSubtitle).font(.subheadline).foregroundStyle(.secondary) }
@@ -85,7 +86,7 @@ private struct PlayerDetails: View {
                 if let channel = playback.channel {
                     let favorite = store.flag(channel, "favorite")
                     Button(favorite ? "Remove Favorite" : "Favorite", systemImage: favorite ? "heart.fill" : "heart") { store.toggle(channel, "favorite") }
-                        .labelStyle(.iconOnly).font(.title2).tint(favorite ? .pink : .secondary)
+                        .labelStyle(.iconOnly).font(.title3).tint(favorite ? .pink : .secondary)
                         .accessibilityIdentifier("player-favorite")
                 }
             }
@@ -111,15 +112,6 @@ private struct PlayerDetails: View {
                 }
                 .accessibilityElement(children: .combine)
             }
-            HStack(spacing: 44) {
-                Button("Previous Channel", systemImage: "backward.fill") { store.stepChannel(by: -1) }
-                Button(playback.isPlaying ? "Pause" : "Play", systemImage: playback.isPlaying ? "pause.fill" : "play.fill") { playback.toggle() }
-                    .font(.largeTitle)
-                Button("Next Channel", systemImage: "forward.fill") { store.stepChannel(by: 1) }
-            }
-            .labelStyle(.iconOnly).font(.title).tint(.primary)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 6)
         }
     }
 }

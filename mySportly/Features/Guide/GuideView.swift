@@ -249,7 +249,7 @@ struct ProgramDetailView: View {
         List {
             Section {
                 if let image = program.image { AsyncImage(url: image) { image in image.resizable().scaledToFit() } placeholder: { ProgressView() }.frame(maxHeight: 220).accessibilityHidden(true) }
-                Text(program.title).font(.title2.bold())
+                Text(program.title).font(.title3.bold())
                 Text(store.name(channel)).foregroundStyle(.secondary)
                 Text(program.start.formatted(date: .complete, time: .shortened))
                 Text("Until \(program.end.formatted(date: .omitted, time: .shortened))").font(.subheadline).foregroundStyle(.secondary)

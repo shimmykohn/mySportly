@@ -64,7 +64,7 @@ struct HeroGamePage: View {
         } details: {
             HomeGameBadge(game: game)
             Text("\(away?.libraryItem.name ?? "Away") at \(home?.libraryItem.name ?? "Home")")
-                .font(.title2.bold()).lineLimit(2)
+                .font(.title3.bold()).lineLimit(2)
             if let league = store.homeSports.leagues[game.game.leagueID] { Text(league.name).font(.subheadline).opacity(0.85) }
         } actions: {
             if game.state == .live {
@@ -105,7 +105,7 @@ struct HeroChannelPage: View {
                     }
             } details: {
                 Text(store.name(channel)).font(.subheadline).opacity(0.85)
-                Text(item.program?.title ?? store.name(channel)).font(.title2.bold()).lineLimit(2)
+                Text(item.program?.title ?? store.name(channel)).font(.title3.bold()).lineLimit(2)
             } actions: {
                 Button("Watch", systemImage: "play.fill") { store.play(channel, source: "hero.channel.\(channel.id)") }
                     .buttonStyle(.glassProminent)

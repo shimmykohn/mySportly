@@ -5,7 +5,8 @@ enum BrowseDestination: Hashable {
     case league(SportsLibraryItem)
 }
 
-/// Sports, News, Movies, Kids, then each added league, then common sports.
+/// Sports, News, Movies, Kids, then each added league, then common sports:
+/// short Liquid Glass buttons, icon and label, straight on the background.
 /// Tiles are plain buttons: several links in one List row would all fire.
 struct BrowseTiles: View {
     @Environment(AppStore.self) private var store
@@ -22,39 +23,35 @@ struct BrowseTiles: View {
     ]
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
             ForEach(Self.categories, id: \.0) { title, symbol, tint in
-                Button { destination = .category(title) } label: { Tile(title: title, tint: tint) { Image(systemName: symbol) } }
+                Button { destination = .category(title) } label: { Tile(title: title) { Image(systemName: symbol).foregroundStyle(tint) } }
                     .accessibilityIdentifier("browse-\(title)")
             }
             ForEach(store.addedLeagues) { league in
-                Button { destination = .league(league) } label: {
-                    Tile(title: league.name, tint: .indigo) { SportsLogo(url: store.logo(for: league), size: 30) }
-                }
-                .accessibilityIdentifier("browse-\(league.name)")
+                Button { destination = .league(league) } label: { Tile(title: league.name) { SportsLogo(url: store.logo(for: league), size: 22) } }
+                    .accessibilityIdentifier("browse-\(league.name)")
             }
             ForEach(Self.sports, id: \.0) { title, symbol in
-                Button { query = title } label: { Tile(title: title, tint: .teal) { Image(systemName: symbol) } }
+                Button { query = title } label: { Tile(title: title) { Image(systemName: symbol).foregroundStyle(.teal) } }
                     .accessibilityIdentifier("browse-\(title)")
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .controlSize(.large)
     }
 }
 
 private struct Tile<Icon: View>: View {
     let title: String
-    let tint: Color
     @ViewBuilder let icon: Icon
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            icon.font(.title2).foregroundStyle(.white)
-            Text(title).font(.headline).foregroundStyle(.white).lineLimit(1)
+        HStack(spacing: 10) {
+            icon.frame(width: 24)
+            Text(title).foregroundStyle(.primary).lineLimit(1)
         }
-        .frame(maxWidth: .infinity, minHeight: 84, alignment: .bottomLeading)
-        .padding(14)
-        .background(tint.gradient, in: .rect(cornerRadius: 18))
-        .contentShape(.rect(cornerRadius: 18))
+        .font(.subheadline.weight(.semibold))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

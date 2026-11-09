@@ -638,14 +638,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             showPlayer = true
         } catch { inform("Playback unavailable", safeError(error)) }
     }
-    /// Previous or next channel: through favorites when the playing channel is
-    /// one of at least two, otherwise through the lineup.
-    func stepChannel(by offset: Int) {
-        let current = playback.channel
-        let list = favorites.count > 1 && current.map { flag($0, "favorite") } == true ? favorites : lineup
-        guard let id = ChannelStepping.neighbor(of: current?.id, in: list.map(\.id), offset: offset), let channel = channelIndex[id] else { return }
-        play(channel)
-    }
     /// The player's title: the game, else the current program, else the channel.
     var playerTitle: String {
         guard let channel = playback.channel else { return "" }

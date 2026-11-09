@@ -82,7 +82,7 @@ struct HomeRow<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.title3.bold()).padding(.horizontal).accessibilityAddTraits(.isHeader)
+            Text(title).font(.headline).padding(.horizontal).accessibilityAddTraits(.isHeader)
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 14) { content }
                     .scrollTargetLayout()

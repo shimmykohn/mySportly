@@ -66,7 +66,7 @@ struct CodePicker: View {
             List(codes.filter { search.isEmpty || label($0).localizedCaseInsensitiveContains(search) || $0.localizedCaseInsensitiveContains(search) }.sorted { label($0) < label($1) }, id: \.self) { code in
                 Button(label(code)) { choose(code); dismiss() }.foregroundStyle(.primary)
             }
-            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always)).navigationTitle(title)
+            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always)).navigationTitle(title).toolbarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
         }
     }
