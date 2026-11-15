@@ -4,7 +4,11 @@ import Combine
 
 @main struct mySportlyApp: App {
     @UIApplicationDelegateAdaptor(NotificationRouting.self) private var notificationRouting
-    @State private var store = AppStore(inMemory: ProcessInfo.processInfo.arguments.contains("--demo"), registerBackground: true)
+    /// Built once per process. `@State`'s initial value is evaluated on every
+    /// `App` init, and a second store would open a second CloudKit-mirrored
+    /// container, which CloudKit refuses to sync.
+    @MainActor private static let sharedStore = AppStore(inMemory: ProcessInfo.processInfo.arguments.contains("--demo"), registerBackground: true)
+    @State private var store = mySportlyApp.sharedStore
     @Environment(\.scenePhase) private var phase
     var body: some Scene {
         WindowGroup {
