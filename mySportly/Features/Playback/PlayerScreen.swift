@@ -189,6 +189,21 @@ private struct PlayerDetails: View {
                         .accessibilityIdentifier("player-favorite")
                 }
             }
+            let feeds = store.playerFeeds
+            if feeds.count > 1, let current = playback.channel {
+                Menu {
+                    Picker("Stream", selection: Binding(get: { current.id }, set: { store.selectPlayerFeed($0) })) {
+                        ForEach(feeds) { feed in Text(feedLabel(feed, in: feeds)).tag(feed.id) }
+                    }
+                } label: {
+                    Label {
+                        Text("Stream: \(feedLabel(current, in: feeds))").lineLimit(1)
+                    } icon: { Image(systemName: "antenna.radiowaves.left.and.right") }
+                    .font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("player-stream-picker")
+            }
             if let error = playback.errorMessage {
                 HStack {
                     Text(error).font(.subheadline).foregroundStyle(.secondary)
@@ -212,5 +227,20 @@ private struct PlayerDetails: View {
                 .accessibilityElement(children: .combine)
             }
         }
+    }
+
+    /// Merged feeds share a display name, so tell them apart by quality,
+    /// provider, then position.
+    private func feedLabel(_ feed: Channel, in feeds: [Channel]) -> String {
+        let multipleSources = Set(feeds.map(\.sourceID)).count > 1
+        func base(_ channel: Channel) -> String {
+            let quality = channel.quality.isEmpty || channel.quality == "Auto" ? nil : channel.quality
+            let source = multipleSources ? store.sources.first { $0.id == channel.sourceID }?.name : nil
+            return [store.name(channel), quality, source].compactMap { $0 }.joined(separator: " · ")
+        }
+        let label = base(feed)
+        let twins = feeds.filter { base($0) == label }
+        guard twins.count > 1, let position = twins.firstIndex(where: { $0.id == feed.id }) else { return label }
+        return "\(label) · Feed \(position + 1)"
     }
 }
