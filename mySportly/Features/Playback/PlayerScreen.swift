@@ -49,11 +49,13 @@ struct PlayerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var choosingSecond = false
-    @State private var showsStreamsButton = false
-    @State private var hideStreams: Task<Void, Never>?
+    @State private var streamsReveal = OverlayReveal()
 
     var body: some View {
-        let video = NativePlayerView(player: store.playback.player, onDisplayChange: store.playback.videoDisplayChanged, onTap: revealStreams)
+        let reveal = streamsReveal
+        let video = NativePlayerView(player: store.playback.player, onDisplayChange: store.playback.videoDisplayChanged,
+                                     onTap: { reveal.reveal() },
+                                     fullScreenAccessory: AnyView(RevealedStreams(reveal: reveal).environment(store)))
             .accessibilityLabel("Native video player")
             .accessibilityIdentifier("stream-preview")
             .accessibilityValue(store.playback.hasVideoFrame ? "Video ready" : "Waiting for video")
@@ -70,14 +72,8 @@ struct PlayerScreen: View {
                     video.ignoresSafeArea().background(.black)
                         // The native controls can't hold our menu on iPhone, so a
                         // Streams button shows on tap and fades with them.
-                        .overlay(alignment: .topTrailing) {
-                            if showsStreamsButton {
-                                // Opening the menu keeps it up until the next tap on the video.
-                                StreamsMenu().simultaneousGesture(TapGesture().onEnded { hideStreams?.cancel() })
-                                    .padding(.top, 8).padding(.trailing, 16).transition(.opacity)
-                            }
-                        }
-                        .onAppear(perform: revealStreams)
+                        .overlay(alignment: .top) { RevealedStreams(reveal: reveal).padding(.top, 8) }
+                        .onAppear { reveal.reveal() }
                 }
             } else {
                 VStack(spacing: 0) {
@@ -113,17 +109,6 @@ struct PlayerScreen: View {
             }
         }
         .sheet(isPresented: $choosingSecond) { SecondStreamPicker() }
-    }
-
-    private func revealStreams() {
-        guard verticalSizeClass == .compact else { return }
-        withAnimation(.easeOut(duration: 0.2)) { showsStreamsButton = true }
-        hideStreams?.cancel()
-        hideStreams = Task {
-            try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeIn(duration: 0.3)) { showsStreamsButton = false }
-        }
     }
 }
 
@@ -278,5 +263,31 @@ struct StreamsMenu: View {
         let twins = feeds.filter { base($0) == label }
         guard twins.count > 1, let position = twins.firstIndex(where: { $0.id == feed.id }) else { return label }
         return "\(label) · Feed \(position + 1)"
+    }
+}
+
+/// Shows the Streams button for a few seconds after each tap on the video.
+@MainActor @Observable final class OverlayReveal {
+    private(set) var visible = false
+    @ObservationIgnored private var hide: Task<Void, Never>?
+    func reveal() {
+        withAnimation(.easeOut(duration: 0.2)) { visible = true }
+        hide?.cancel()
+        hide = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.3)) { self?.visible = false }
+        }
+    }
+    /// Keeps it up while its menu is open, until the next tap on the video.
+    func hold() { hide?.cancel() }
+}
+
+private struct RevealedStreams: View {
+    let reveal: OverlayReveal
+    var body: some View {
+        if reveal.visible {
+            StreamsMenu().simultaneousGesture(TapGesture().onEnded { reveal.hold() }).transition(.opacity)
+        }
     }
 }

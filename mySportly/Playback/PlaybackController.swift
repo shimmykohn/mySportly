@@ -271,6 +271,9 @@ struct NativePlayerView: UIViewControllerRepresentable {
     var onDisplayChange: ((Bool, AVPlayerItem?) -> Void)?
     /// Taps on the video, alongside the player's own show/hide controls.
     var onTap: (() -> Void)?
+    /// Shown over the system full-screen player, which has no public slot for
+    /// custom controls on iPhone: bottom right in portrait, top center in landscape.
+    var fullScreenAccessory: AnyView?
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
@@ -279,6 +282,8 @@ struct NativePlayerView: UIViewControllerRepresentable {
         controller.canStartPictureInPictureAutomaticallyFromInline = pictureInPicture
         context.coordinator.onDisplayChange = onDisplayChange
         context.coordinator.onTap = onTap
+        context.coordinator.accessory = fullScreenAccessory
+        controller.delegate = context.coordinator
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped))
         tap.cancelsTouchesInView = false; tap.delegate = context.coordinator
         controller.view.addGestureRecognizer(tap)
@@ -295,14 +300,69 @@ struct NativePlayerView: UIViewControllerRepresentable {
         controller.showsPlaybackControls = controls
         context.coordinator.onDisplayChange = onDisplayChange
         context.coordinator.onTap = onTap
+        context.coordinator.accessory = fullScreenAccessory
     }
-    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) { coordinator.observation = nil; coordinator.onDisplayChange = nil; coordinator.onTap = nil; controller.player = nil }
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) {
+        coordinator.observation = nil; coordinator.onDisplayChange = nil; coordinator.onTap = nil
+        coordinator.detach(); controller.delegate = nil; controller.player = nil
+    }
+    @MainActor final class Coordinator: NSObject, UIGestureRecognizerDelegate, AVPlayerViewControllerDelegate {
         var observation: NSKeyValueObservation?
         var onDisplayChange: ((Bool, AVPlayerItem?) -> Void)?
         var onTap: (() -> Void)?
+        var accessory: AnyView?
+        private var host: UIHostingController<AnyView>?
+        private var hostTap: UITapGestureRecognizer?
+        private var placement: [NSLayoutConstraint] = []
+
         @objc func tapped() { onTap?() }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+
+        func playerViewController(_ playerViewController: AVPlayerViewController, willBeginFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator) {
+            coordinator.animate(alongsideTransition: nil) { [weak self, weak playerViewController] context in
+                guard !context.isCancelled, let self, let window = playerViewController?.viewIfLoaded?.window else { return }
+                self.attach(in: window)
+            }
+        }
+        func playerViewController(_ playerViewController: AVPlayerViewController, willEndFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator) { detach() }
+
+        /// Puts the accessory over the topmost presented controller: the
+        /// system's full-screen player.
+        private func attach(in window: UIWindow) {
+            guard let accessory, host == nil else { return }
+            var top = window.rootViewController
+            while let presented = top?.presentedViewController { top = presented }
+            guard let top else { return }
+            let host = UIHostingController(rootView: accessory)
+            host.sizingOptions = .intrinsicContentSize
+            host.view.backgroundColor = .clear
+            host.view.translatesAutoresizingMaskIntoConstraints = false
+            top.addChild(host); top.view.addSubview(host.view); host.didMove(toParent: top)
+            let tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
+            tap.cancelsTouchesInView = false; tap.delegate = self
+            top.view.addGestureRecognizer(tap)
+            self.host = host; hostTap = tap
+            place(in: top.view)
+            host.view.registerForTraitChanges([UITraitVerticalSizeClass.self]) { [weak self] (_: UIView, _: UITraitCollection) in
+                guard let self, let container = self.host?.view.superview else { return }
+                self.place(in: container)
+            }
+            onTap?()
+        }
+        private func place(in container: UIView) {
+            guard let view = host?.view else { return }
+            NSLayoutConstraint.deactivate(placement)
+            let guide = container.safeAreaLayoutGuide
+            placement = container.traitCollection.verticalSizeClass == .compact
+                ? [view.topAnchor.constraint(equalTo: guide.topAnchor, constant: 8), view.centerXAnchor.constraint(equalTo: guide.centerXAnchor)]
+                : [view.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -16), view.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -16)]
+            NSLayoutConstraint.activate(placement)
+        }
+        func detach() {
+            if let hostTap { hostTap.view?.removeGestureRecognizer(hostTap) }
+            host?.willMove(toParent: nil); host?.view.removeFromSuperview(); host?.removeFromParent()
+            host = nil; hostTap = nil; placement = []
+        }
     }
 }
 
