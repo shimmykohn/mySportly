@@ -28,6 +28,9 @@ import Observation
         refresh()
     }
 
+    /// The key for a background job, unless a credential or quota failure paused AI.
+    func activeKey() -> String? { blocked ? nil : key() }
+
     func groupModel() -> OpenAIGroupModel? {
         guard !blocked, let key = key() else { return nil }
         return OpenAIGroupModel(key: key)

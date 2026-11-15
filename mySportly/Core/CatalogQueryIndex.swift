@@ -266,7 +266,38 @@ public struct CatalogQueryIndex: Sendable {
         return Array(bestByGuide.values.sorted(by: precedes).prefix(10))
     }
 
-    public func guideGames(reference: SportsDataIndex, refreshed: [UUID: Date], at date: Date, timeZone: TimeZone = .current) throws -> GuideGameMatches {
+    /// Matchup-looking sports listings in the next `GameDetection.horizon`
+    /// that local parsing can't resolve, one per title and summary.
+    public func unresolvedGameListings(reference: SportsDataIndex, at date: Date, known: Set<String>) throws -> [GameListing] {
+        let parser = GuideGameParser(reference: reference)
+        var result: [String: GameListing] = [:]
+        for (guide, positions) in sportsSources {
+            try Task.checkCancellation()
+            let eligible = positions.filter { !entries[$0].inactive }
+            guard let first = eligible.first else { continue }
+            let entry = entries[first]
+            for program in window(guide, start: date, end: date + GameDetection.horizon) where !program.placeholder {
+                let value = shifted(program.value, by: guide.offset)
+                guard value.end > date, value.end.timeIntervalSince(value.start) <= 8 * 3600, !SportsGameMatcher.isReplayOrStudio(value.title) else { continue }
+                let key = GameDetection.key(title: value.title, summary: value.summary)
+                guard result[key] == nil, !known.contains(key) else { continue }
+                let context = value.categories.joined(separator: " ") + " " + entry.channel.group + " " + entry.name
+                let sports = program.sports || entry.sports
+                guard parser.opponents(title: value.title, context: context) == nil,
+                      !sports || parser.opponents(title: value.summary, context: value.title + " " + context) == nil else { continue }
+                var candidates = parser.candidates(title: value.title, context: context)
+                if candidates.isEmpty, sports { candidates = parser.candidates(title: value.summary, context: value.title + " " + context) }
+                guard !candidates.isEmpty else { continue }
+                result[key] = GameListing(key: key, title: value.title, summary: String(value.summary.prefix(400)), context: entry.name + " · " + entry.channel.group,
+                                          candidates: candidates, end: value.end)
+            }
+        }
+        return result.values.sorted { $0.key < $1.key }
+    }
+
+    /// `detected` holds model answers by `GameDetection.key`; they fill in only
+    /// where local parsing found no opponents.
+    public func guideGames(reference: SportsDataIndex, refreshed: [UUID: Date], at date: Date, timeZone: TimeZone = .current, detected: [String: [String]] = [:]) throws -> GuideGameMatches {
         struct Listing {
             let program: GuideProgram
             let teams: [SportsTeam]
@@ -287,7 +318,11 @@ public struct CatalogQueryIndex: Sendable {
                 // Generic titles such as "NFL Football" often put the matchup
                 // in the description. Only use it for a sports listing.
                 let teams = parser.opponents(title: value.title, context: context) ??
-                    ((program.sports || entry.sports) ? parser.opponents(title: value.summary, context: value.title + " " + context) : nil)
+                    ((program.sports || entry.sports) ? parser.opponents(title: value.summary, context: value.title + " " + context) : nil) ??
+                    detected[GameDetection.key(title: value.title, summary: value.summary)].flatMap { ids -> [SportsTeam]? in
+                        let found = ids.compactMap { reference.teams[$0] }
+                        return found.count == 2 && found[0].leagueID == found[1].leagueID ? found : nil
+                    }
                 guard let teams else { continue }
                 let pair = teams.map(\.id).joined(separator: "|")
                 byOpponents[pair, default: []].append(Listing(program: value, teams: teams, positions: eligible))

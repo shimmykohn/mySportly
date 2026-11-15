@@ -126,12 +126,21 @@ public struct DecisionsClient: Sendable {
     }
 
     func send(_ body: DecisionsRequest, timeout: TimeInterval) async throws -> [String: DecisionAnswer] {
-        var request = URLRequest(url: Decisions.endpoint)
+        let data = try await OpenAIHTTP.post(Decisions.endpoint, key: key, body: JSONEncoder().encode(body), timeout: timeout)
+        return try Self.decode(data, for: body)
+    }
+}
+
+/// One authenticated POST with brief retries on rate limits and server errors.
+/// Ephemeral sessions never persist authenticated responses.
+enum OpenAIHTTP {
+    static func post(_ url: URL, key: String, body: Data, timeout: TimeInterval) async throws -> Data {
+        guard !key.isEmpty else { throw DecisionsFailure.credentials }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"; request.timeoutInterval = timeout
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
-        // Ephemeral sessions never persist authenticated responses.
+        request.httpBody = body
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil; configuration.httpCookieStorage = nil
         let session = URLSession(configuration: configuration)
@@ -140,7 +149,7 @@ public struct DecisionsClient: Sendable {
             try Task.checkCancellation()
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw DecisionsFailure.unavailable }
-            if http.statusCode == 200 { return try Self.decode(data, for: body) }
+            if http.statusCode == 200 { return data }
             if http.statusCode == 401 || http.statusCode == 403 { throw DecisionsFailure.credentials }
             if [429, 500, 502, 503].contains(http.statusCode), attempt < 2 {
                 let delay = min(10, max(Double(1 << attempt), Double(http.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 0))

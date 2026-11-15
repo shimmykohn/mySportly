@@ -10,13 +10,14 @@ import UIKit
         app.launch()
         app.selectMainTab("Guide")
         let count = app.staticTexts["guide-channel-count"].firstMatch
-        assertValue(count, "4")
+        // Sample News HD and SD share a guide ID: one channel with two feeds.
+        assertValue(count, "3")
         app.selectLineup("All Channels")
-        assertValue(count, "7")
+        assertValue(count, "6")
         app.selectLineup("Unclassified")
         assertValue(count, "1")
         app.selectLineup("My Lineup")
-        assertValue(count, "4")
+        assertValue(count, "3")
         capture("Native preferred lineup")
     }
     private func assertValue(_ element: XCUIElement, _ value: String) {

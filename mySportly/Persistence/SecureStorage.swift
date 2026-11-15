@@ -110,6 +110,19 @@ actor CatalogCache {
     func removePreparedStages() {
         try? FileManager.default.removeItem(at: directory.appending(path: "stages.sealed"))
     }
+    /// AI answers derived from the catalog; sealed like it, never synced.
+    func saveAIResults(_ results: AIResults) throws {
+        try prepare()
+        let sealed = try AES.GCM.seal(JSONEncoder().encode(results), using: key())
+        guard let data = sealed.combined else { throw KeychainStore.SecureFailure.write }
+        try data.write(to: directory.appending(path: "ai.sealed"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+    func loadAIResults() -> AIResults? {
+        guard let data = try? Data(contentsOf: directory.appending(path: "ai.sealed")),
+              let box = try? AES.GCM.SealedBox(combined: data),
+              let key = try? key(), let plain = try? AES.GCM.open(box, using: key) else { return nil }
+        return try? JSONDecoder().decode(AIResults.self, from: plain)
+    }
     func savePlaylist(_ text: String, sourceID: UUID) throws {
         try prepare()
         let sealed = try AES.GCM.seal(Data(text.utf8), using: key())

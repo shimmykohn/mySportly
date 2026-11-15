@@ -25,7 +25,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private(set) var matchingGames = false
     private(set) var activeSportsGameID: String?
     @ObservationIgnored private var sportsMatchTask: Task<Void, Never>?
-    private let cache = CatalogCache()
+    let cache = CatalogCache()
     private(set) var launchTimeline = LaunchTimeline()
     @ObservationIgnored private let launchSignposter = OSSignposter(subsystem: "app.iska.mysportly", category: "Launch")
     private let provider = ProviderClient()
@@ -80,6 +80,11 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     @ObservationIgnored private var organizationUsesCachedAI = true
     private var importTask: Task<Bool, Never>?
     private var organizeTask: Task<Void, Never>?
+    /// Feed merges, detected games and clean names (see `AIJobs.swift`).
+    var aiResults = AIResults()
+    @ObservationIgnored var aiJobsTask: Task<Void, Never>?
+    @ObservationIgnored private var displayNames: [String: String] = [:]
+    @ObservationIgnored private var derivedVariants: [String: [String]] = [:]
     private var importRequiresExistingSource = false
     private(set) var refreshingSource = false
     private var loaded = false
@@ -213,6 +218,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         launchTimeline.mark(.catalogDecoded)
         let prepare = launchSignposter.beginInterval("prepare")
         preparedStages = await cache.loadPreparedStages()
+        aiResults = await cache.loadAIResults() ?? AIResults()
+        resetDisplayNames()
         rebuild(force: true)
         await waitForCatalog()
         launchSignposter.endInterval("prepare", prepare)
@@ -357,12 +364,21 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         let id = UUID(); preparationID = id
         preparingCatalog = true
         let channels = catalog.channels, programs = catalog.programs, overrides = personal.snapshotValues(), guideChannels = catalog.guideChannels, stages = preparedStages
+        let mergedPairs = aiResults.mergedPairs
         queryIndexTask = Task { [weak self] in
             do {
-                let prepared = try await catalogWork {
-                    try PreparedCatalog(channels: channels, programs: programs, activeSources: active, overrides: overrides, guideChannels: guideChannels, stages: stages)
+                let (prepared, groups) = try await catalogWork {
+                    // Duplicate feeds: exact local groups plus confirmed AI pairs.
+                    // The user's own overrides (a manual split) win.
+                    let present = Set(channels.lazy.filter { active.contains($0.sourceID) }.map(\.id))
+                    let groups = FeedMerging.groups(strict: FeedMerging.strictGroups(channels.filter { active.contains($0.sourceID) }), pairs: mergedPairs, present: present)
+                    let merged = AIResults.variantOverrides(groups).merging(overrides) { _, personal in personal }
+                    return (try PreparedCatalog(channels: channels, programs: programs, activeSources: active, overrides: merged, guideChannels: guideChannels, stages: stages), groups)
                 }
                 guard !Task.isCancelled, let self, self.preparationID == id else { return }
+                var derived: [String: [String]] = [:]
+                for group in groups { for member in group { derived[member] = group } }
+                self.derivedVariants = derived
                 self.directory = prepared.directory
                 self.channels = prepared.directory.channels
                 self.channelIndex = prepared.channelsByID
@@ -447,7 +463,20 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     }
 
     func key(_ channel: Channel, _ field: String) -> String { "channel.\(channel.id).\(field)" }
-    func name(_ channel: Channel) -> String { let custom: String = personal.value(key(channel, "name"), default: ""); return custom.isEmpty ? channel.name : custom }
+    func name(_ channel: Channel) -> String {
+        let custom: String = personal.value(key(channel, "name"), default: "")
+        return custom.isEmpty ? displayName(channel.name) : custom
+    }
+    /// The provider name tidied by local rules or the AI job, memoized.
+    func displayName(_ raw: String) -> String {
+        // Reading `aiResults` first keeps views observing it, so new names show.
+        let results = aiResults
+        if let cached = displayNames[raw] { return cached }
+        let value = results.displayName(raw)
+        displayNames[raw] = value
+        return value
+    }
+    func resetDisplayNames() { displayNames = [:] }
     func flag(_ channel: Channel, _ field: String) -> Bool { personal.value(key(channel, field), default: false) }
     func language(_ channel: Channel) -> String { personal.value(key(channel, "language"), default: directory?.metadata[channel.id]?.language ?? channel.language) }
     func region(_ channel: Channel) -> String { personal.value(key(channel, "region"), default: directory?.metadata[channel.id]?.region ?? channel.region) }
@@ -658,7 +687,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     }
     func previousChannel() { if let previous = playback.previous, let channel = channelIndex[previous.id] { play(channel) } }
     func variants(of channel: Channel) -> [Channel] {
-        let group: [String] = personal.value(key(channel, "variants"), default: playbackAlternatives[channel.id] ?? [channel.id])
+        let group: [String] = personal.value(key(channel, "variants"), default: derivedVariants[channel.id] ?? playbackAlternatives[channel.id] ?? [channel.id])
         return group.compactMap { channelIndex[$0] }
     }
     func matchSportsGames() {
@@ -673,7 +702,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         matchingGames = true
         sportsMatchTask = Task { [weak self] in
             do {
-                let result = try await catalogWork { try query.guideGames(reference: index, refreshed: refreshed, at: date) }
+                let detected = self?.aiResults.detectedGames ?? [:]
+                let result = try await catalogWork { try query.guideGames(reference: index, refreshed: refreshed, at: date, detected: detected) }
                 guard !Task.isCancelled, let self, self.queryRevision == revision, self.sportsData.metadataRevision == sportsRevision else { return }
                 let links = result.links
                 self.sportsData.showGuideGames(result.index)
@@ -778,6 +808,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     /// audience is sent. Unchanged groups are never resent; results are saved
     /// as `taxonomy.placement.*` and sync like other personal choices.
     func organizeInBackground() {
+        runAIJobs()
         guard organizeTask == nil, catalogReady, !demo, let model = openAI.groupModel(), let groups = directory?.nameGroups else { return }
         let audience = organizationAudience
         let pending = groups.pending(in: audience).filter { group in
