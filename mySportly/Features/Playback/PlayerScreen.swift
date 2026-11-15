@@ -212,7 +212,9 @@ private struct PlayerDetails: View {
                 // Stands out once the episode ends.
                 if playback.reachedEnd { button.buttonStyle(.glassProminent) } else { button.buttonStyle(.glass) }
             }
-            if let error = playback.errorMessage {
+            if let item = store.nowPlayingVOD, playback.errorMessage != nil, !VODFormat.isNative(item.container) {
+                OpenElsewhere(item: item)
+            } else if let error = playback.errorMessage {
                 HStack {
                     Text(error).font(.subheadline).foregroundStyle(.secondary)
                     Button("Try Again") { playback.retry() }

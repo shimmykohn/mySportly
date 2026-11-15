@@ -21,6 +21,7 @@ struct MovieDetailView: View {
                     }
                     WatchedButton(progress: progress)
                 }
+                if !VODFormat.isNative(movie.container) { OpenElsewhere(item: progress) }
                 if let plot = detail?.plot.nonEmpty { Text(plot).font(.body) }
                 if let director = detail?.director.nonEmpty { LabeledContent("Director", value: director).font(.subheadline) }
                 if let cast = detail?.cast.nonEmpty { LabeledContent("Cast") { Text(cast).multilineTextAlignment(.trailing) }.font(.subheadline) }
@@ -51,6 +52,7 @@ struct SeriesDetailView: View {
                 if let upNext, let detail {
                     let item = store.progressItem(for: upNext, of: show)
                     PlayButton(progress: item, label: upNext.code) { store.play(upNext, of: show, in: detail) }
+                    if !VODFormat.isNative(upNext.container) { OpenElsewhere(item: item) }
                 }
                 if !show.plot.isEmpty { Text(show.plot).font(.body) }
                 if let detail, !detail.seasons.isEmpty {
@@ -89,6 +91,7 @@ struct SeriesDetailView: View {
 
 private struct EpisodeRow: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.openURL) private var openURL
     let episode: Episode
     let show: Series
     let detail: SeriesDetail
@@ -123,6 +126,11 @@ private struct EpisodeRow: View {
             }
             Button(progress.isFinished ? "Mark as Unwatched" : "Mark as Watched", systemImage: progress.isFinished ? "circle" : "checkmark.circle") {
                 store.setWatched(progress, !progress.isFinished)
+            }
+            if !VODFormat.isNative(episode.container), let media = store.externalMediaURL(progress) {
+                ForEach(ExternalPlayer.allCases.filter(\.isInstalled)) { app in
+                    if let link = app.link(for: media) { Button("Open in \(app.name)", systemImage: "arrow.up.forward.app") { openURL(link) } }
+                }
             }
         }
         .accessibilityIdentifier("episode-\(episode.id)")

@@ -70,6 +70,13 @@ extension AppStore {
         if !watched { updated.position = 0 }
         try? personal.set(WatchProgress.key(item.itemID), updated)
     }
+    /// The provider's own file, for another app to play.
+    func externalMediaURL(_ item: WatchProgress) -> URL? {
+        if demo { return SampleVOD.streamURL }
+        guard let secrets = try? KeychainStore.credentials(item.sourceID) else { return nil }
+        return try? provider.vodURL(kind: item.kind, providerID: item.providerID, container: item.container, secrets: secrets)
+    }
+
     /// "Remove from Continue Watching".
     func clearProgress(_ item: WatchProgress) { try? personal.remove(WatchProgress.key(item.itemID)) }
 }
