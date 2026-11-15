@@ -13,7 +13,9 @@ extension AppStore {
         let catalogCache = self.cache
         aiJobsTask = Task { [weak self] in
             var results = start
-            defer { self?.aiJobsTask = nil }
+            self?.aiActivity = "Starting…"
+            defer { self?.aiJobsTask = nil; self?.aiActivity = nil }
+            @MainActor func step(_ label: String, _ index: Int, of total: Int) { self?.aiActivity = "\(label) · \(index + 1) of \(total)" }
             do {
                 // Games: the most visible, first.
                 let knownListings = Set(results.games.keys)
@@ -21,14 +23,18 @@ extension AppStore {
                     try query.unresolvedGameListings(reference: reference, at: date, known: knownListings)
                 }
                 let decisions = DecisionsClient(key: key)
-                for batch in Array(listings.prefix(Self.aiLimits.listings)).chunked(Decisions.maxQuestions / 2) {
+                let gameBatches = Array(listings.prefix(Self.aiLimits.listings)).chunked(Decisions.maxQuestions / 2)
+                for (index, batch) in gameBatches.enumerated() {
+                    step("Finding games in the guide", index, of: gameBatches.count)
                     let answers = try await decisions.answers(input: GameDetection.input, questions: GameDetection.questions(batch, leagues: reference.leagues))
                     results.games.merge(GameDetection.resolve(answers, listings: batch, teams: reference.teams)) { _, new in new }
                 }
                 // Duplicate feeds.
                 let candidates = try await catalogWork { FeedMerging.candidates(channels, strict: FeedMerging.strictGroups(channels)) }
                 let unasked = candidates.filter { results.merges[$0.key] == nil }
-                for batch in Array(unasked.prefix(Self.aiLimits.pairs)).chunked(Decisions.maxQuestions) {
+                let pairBatches = Array(unasked.prefix(Self.aiLimits.pairs)).chunked(Decisions.maxQuestions)
+                for (index, batch) in pairBatches.enumerated() {
+                    step("Checking duplicate feeds", index, of: pairBatches.count)
                     let answers = try await decisions.answers(input: FeedMerging.input, questions: FeedMerging.questions(batch))
                     for candidate in batch {
                         guard let answer = answers[candidate.key] else { continue }
@@ -41,11 +47,14 @@ extension AppStore {
                     Set(channels.map(\.name)).subtracting(answered).filter { NameCleaning.needsModel(NameCleaning.local($0)) }.sorted()
                 }
                 let names = NameCleanupClient(key: key)
-                for batch in Array(leftovers.prefix(Self.aiLimits.names)).chunked(NameCleanupClient.batchSize) {
+                let nameBatches = Array(leftovers.prefix(Self.aiLimits.names)).chunked(NameCleanupClient.batchSize)
+                for (index, batch) in nameBatches.enumerated() {
+                    step("Tidying channel names", index, of: nameBatches.count)
                     results.names.merge(try await names.clean(batch)) { _, new in new }
                     results.namesAsked.formUnion(batch)
                 }
                 results.prune(at: .now, channels: channels, candidates: candidates)
+                results.lastRun = Date.now.timeIntervalSince1970
                 await self?.applyAIResults(results, cache: catalogCache)
                 self?.openAI.succeeded()
             } catch {

@@ -18,7 +18,17 @@ public struct AIResults: Codable, Equatable, Sendable {
     public var names: [String: String] = [:]
     /// Raw names the model already saw (kept or rejected), so they aren't resent.
     public var namesAsked: Set<String> = []
+    /// When the last run finished (seconds since 1970). Nil before the first run.
+    public var lastRun: Double?
     public init() {}
+
+    /// What the jobs found, for Settings → OpenAI.
+    public var summary: AIActivitySummary {
+        AIActivitySummary(gamesFound: detectedGames.count, listingsChecked: games.count,
+                          feedsCombined: mergedPairs.count, pairsChecked: merges.count,
+                          namesTidied: names.filter { $0.key != $0.value }.count, namesChecked: namesAsked.count,
+                          lastRun: lastRun.map(Date.init(timeIntervalSince1970:)))
+    }
 
     public var detectedGames: [String: [String]] { games.filter { !$0.value.teams.isEmpty }.mapValues(\.teams) }
     public var mergedPairs: [[String]] { merges.values.filter(\.same).map(\.ids).sorted { $0.joined() < $1.joined() } }
@@ -47,4 +57,11 @@ public struct AIResults: Codable, Equatable, Sendable {
         }
         return result
     }
+}
+
+public struct AIActivitySummary: Equatable, Sendable {
+    public var gamesFound: Int, listingsChecked: Int
+    public var feedsCombined: Int, pairsChecked: Int
+    public var namesTidied: Int, namesChecked: Int
+    public var lastRun: Date?
 }

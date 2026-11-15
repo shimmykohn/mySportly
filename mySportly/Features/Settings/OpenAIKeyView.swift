@@ -14,6 +14,7 @@ struct OpenAIKeyView: View {
                     .accessibilityIdentifier("openai-status")
                 if let problem = openAI.lastProblem { Text(problem).foregroundStyle(.secondary) }
             }
+            if openAI.configured { AIActivitySection() }
             Section {
                 SecureField(openAI.configured ? "Replace Key" : "API Key", text: $key)
                     .textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never)
@@ -32,5 +33,49 @@ struct OpenAIKeyView: View {
             }
         }
         .navigationTitle("OpenAI")
+    }
+}
+
+/// What the background AI jobs found, and what they're doing now.
+private struct AIActivitySection: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        let summary = store.aiResults.summary
+        Section {
+            if let activity = store.aiActivity {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text(activity).foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("ai-activity")
+            } else {
+                LabeledContent("Last Run") {
+                    if let date = summary.lastRun { Text(date, format: .relative(presentation: .named)) } else { Text("Not yet") }
+                }
+                .accessibilityIdentifier("ai-last-run")
+            }
+            row("Games Found", summary.gamesFound, checked: summary.listingsChecked, noun: "listings")
+            row("Feeds Combined", summary.feedsCombined, checked: summary.pairsChecked, noun: "pairs")
+            row("Names Tidied", summary.namesTidied, checked: summary.namesChecked, noun: "names")
+            Button("Check Now") { store.runAIJobs() }
+                .disabled(store.aiActivity != nil || !store.catalogReady || store.demo)
+                .accessibilityIdentifier("ai-run-now")
+        } header: {
+            Text("Activity")
+        } footer: {
+            Text("Runs after your lineup loads, when you open the app and after each refresh. Only new channels and listings are sent.")
+        }
+    }
+
+    private func row(_ title: String, _ value: Int, checked: Int, noun: String) -> some View {
+        LabeledContent(title) {
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(value, format: .number).monospacedDigit()
+                if checked > 0 { Text("of \(checked.formatted()) \(noun)").font(.caption).foregroundStyle(.secondary) }
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }

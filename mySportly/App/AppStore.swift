@@ -15,6 +15,9 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     #endif
     let personal: PersonalStore
     let playback = PlaybackController()
+    /// The second game in two-up viewing; muted unless the user moves the sound to it.
+    let secondPlayback = PlaybackController(secondary: true)
+    private(set) var secondGameID: String?
     let openAI = OpenAIService()
     let sportsData = SportsDataStore()
     private(set) var gameLinks: [String: [SportsFeedLink]] = [:]
@@ -82,6 +85,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private var organizeTask: Task<Void, Never>?
     /// Feed merges, detected games and clean names (see `AIJobs.swift`).
     var aiResults = AIResults()
+    /// What the AI jobs are doing right now, for Settings → OpenAI. Nil when idle.
+    var aiActivity: String?
     @ObservationIgnored var aiJobsTask: Task<Void, Never>?
     @ObservationIgnored private var displayNames: [String: String] = [:]
     @ObservationIgnored private var derivedVariants: [String: [String]] = [:]
@@ -355,7 +360,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func rebuild(force: Bool = false) {
         let active = Set(sources.map(\.id))
         if importRequiresExistingSource, let importingSource, !active.contains(importingSource) { cancelImport() }
-        if let source = playback.channel?.sourceID, !active.contains(source) { playback.stop() }
+        if let source = secondPlayback.channel?.sourceID, !active.contains(source) { stopSecond() }
+        if let source = playback.channel?.sourceID, !active.contains(source) { stopPlayback() }
         guard force || requestedPersonalRevision != personal.catalogRevision else { return }
         requestedPersonalRevision = personal.catalogRevision
         queryIndexTask?.cancel()
@@ -631,7 +637,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     }
     func removeSource(_ source: TVSource) async {
         if importingSource == source.id { cancelImport(); _ = await importTask?.value }
-        if playback.channel?.sourceID == source.id { playback.stop() }
+        if secondPlayback.channel?.sourceID == source.id { stopSecond() }
+        if playback.channel?.sourceID == source.id { stopPlayback() }
         do {
             try personal.remove("source.\(source.id)")
             rebuild()
@@ -667,23 +674,70 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             showPlayer = true
         } catch { inform("Playback unavailable", safeError(error)) }
     }
-    /// The player's title: the game, else the current program, else the channel.
-    var playerTitle: String {
-        guard let channel = playback.channel else { return "" }
-        if let gameID = activeSportsGameID, let game = game(gameID) {
-            let teams = sportsData.index.teams.isEmpty ? homeSports.teams : sportsData.index.teams
-            if let away = teams[game.awayID] ?? homeSports.teams[game.awayID], let home = teams[game.homeID] ?? homeSports.teams[game.homeID] {
-                return "\(away.libraryItem.name) at \(home.libraryItem.name)"
-            }
+    // MARK: Two-up viewing
+
+    /// Opens a second stream under the first. Its sound starts off; the first keeps playing.
+    func playSecond(_ channel: Channel, gameID: String? = nil) {
+        do {
+            let preferred: String = personal.value(key(channel, "preferredVariant"), default: channel.id)
+            let chosen = gameID == nil ? (channelIndex[preferred] ?? channel) : channel
+            guard chosen.id != playback.channel?.id else { inform("Already playing", "Choose a different game or channel."); return }
+            guard sources.contains(where: { $0.id == chosen.sourceID }) else { throw CatalogError.rejected }
+            let secrets = try KeychainStore.credentials(chosen.sourceID) ?? SourceSecrets()
+            let url = try provider.playbackURL(chosen, secrets: secrets)
+            secondGameID = gameID
+            secondPlayback.play(chosen, url: url, title: now(on: chosen)?.title, preferredLanguage: personal.value("preferences.audioLanguage", default: languages.first ?? "en"))
+            focusSound(onSecond: false)
+        } catch { inform("Playback unavailable", safeError(error)) }
+    }
+    func watchSecondGame(_ game: SportsGame) {
+        let saved: String = personal.value("sports.feed.\(game.id)", default: "")
+        let available = feeds(for: game.id, playableOnly: true).filter { $0.id != playback.channel?.id }
+        guard let chosen = available.first(where: { $0.id == saved }) ?? available.first else {
+            inform("No stream available now", "This game has no other matching feed in your lineup."); return
         }
+        playSecond(chosen, gameID: game.id)
+    }
+    var watchingTwo: Bool { secondPlayback.channel != nil }
+    var soundOnSecond: Bool { watchingTwo && !secondPlayback.muted }
+    /// Two-up viewing plays one sound at a time.
+    func focusSound(onSecond: Bool) {
+        let second = onSecond && watchingTwo
+        playback.setMuted(second); secondPlayback.setMuted(!second)
+    }
+    func stopSecond() { secondPlayback.stop(); secondGameID = nil; playback.setMuted(false) }
+    func stopPlayback() { stopSecond(); playback.stop() }
+    /// Live games to add as the second stream, excluding what's already playing.
+    var secondGameChoices: [HomeGame] {
+        let content = homeContent
+        let live = (content.teamGames + content.leagueRows.flatMap(\.games)).filter { $0.state == .live && $0.id != activeSportsGameID }
+        var seen = Set<String>()
+        return live.filter { seen.insert($0.id).inserted }
+    }
+
+    /// The player's title: the game, else the current program, else the channel.
+    var playerTitle: String { watchTitle(playback.channel, gameID: activeSportsGameID) }
+    /// "Channel · League" for games, else the channel name when the title is a program.
+    var playerSubtitle: String { watchSubtitle(playback.channel, gameID: activeSportsGameID) }
+    var secondTitle: String { watchTitle(secondPlayback.channel, gameID: secondGameID) }
+    var secondSubtitle: String { watchSubtitle(secondPlayback.channel, gameID: secondGameID) }
+
+    func watchTitle(_ channel: Channel?, gameID: String?) -> String {
+        guard let channel else { return "" }
+        if let gameID, let game = game(gameID), let title = gameTitle(game) { return title }
         return now(on: channel)?.title ?? name(channel)
     }
-    /// "Channel · League" for games, else the channel name when the title is a program.
-    var playerSubtitle: String {
-        guard let channel = playback.channel else { return "" }
-        let league = activeSportsGameID.flatMap { game($0) }.flatMap { sportsData.index.leagues[$0.leagueID] ?? homeSports.leagues[$0.leagueID] }?.name
-        let title = playerTitle
+    func watchSubtitle(_ channel: Channel?, gameID: String?) -> String {
+        guard let channel else { return "" }
+        let league = gameID.flatMap { game($0) }.flatMap { sportsData.index.leagues[$0.leagueID] ?? homeSports.leagues[$0.leagueID] }?.name
+        let title = watchTitle(channel, gameID: gameID)
         return [title == name(channel) ? nil : name(channel), league].compactMap { $0 }.joined(separator: " · ")
+    }
+    /// "Away at Home", when both teams are known.
+    func gameTitle(_ game: SportsGame) -> String? {
+        let teams = sportsData.index.teams.isEmpty ? homeSports.teams : sportsData.index.teams
+        guard let away = teams[game.awayID] ?? homeSports.teams[game.awayID], let home = teams[game.homeID] ?? homeSports.teams[game.homeID] else { return nil }
+        return "\(away.libraryItem.name) at \(home.libraryItem.name)"
     }
     func previousChannel() { if let previous = playback.previous, let channel = channelIndex[previous.id] { play(channel) } }
     func variants(of channel: Channel) -> [Channel] {

@@ -41,8 +41,14 @@ struct PlaybackAlternative {
     private var preferredLanguage = "en"
     private var title: String?
     private var remoteTargets: [Any] = []
+    /// The second game in two-up viewing: no lock-screen controls or Now Playing.
+    let secondary: Bool
+    /// Whether this player's sound is off (two-up viewing plays one at a time).
+    private(set) var muted = false
+    func setMuted(_ on: Bool) { muted = on; player.isMuted = on }
 
-    init() {
+    init(secondary: Bool = false) {
+        self.secondary = secondary
         timeObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -55,6 +61,7 @@ struct PlaybackAlternative {
                 self.updateNowPlaying()
             }
         }
+        guard !secondary else { return }
         let commands = MPRemoteCommandCenter.shared()
         remoteTargets.append(commands.playCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.resume() }; return .success })
         remoteTargets.append(commands.pauseCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.pause() }; return .success })
@@ -224,7 +231,7 @@ struct PlaybackAlternative {
         cancelPending(); clearItemObservers(); player.replaceCurrentItem(with: nil)
         channel = nil; currentURL = nil; isPlaying = false; isLoading = false; hasVideoFrame = false; wantsPlayback = false; audioReady = false; errorMessage = nil
         alternatives = []; playbackNotice = nil; videoUnavailable = false
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        if !secondary { MPNowPlayingInfoCenter.default().nowPlayingInfo = nil }
     }
     private func cancelPending() { sessionID = UUID(); retryTask?.cancel(); retryTask = nil; preparationTask?.cancel(); preparationTask = nil; stallTask?.cancel(); stallTask = nil; videoTask?.cancel(); videoTask = nil }
     private func clearItemObservers() {
@@ -236,7 +243,7 @@ struct PlaybackAlternative {
         failedObserver = nil; stalledObserver = nil
     }
     private func updateNowPlaying() {
-        guard let channel else { return }
+        guard !secondary, let channel else { return }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [MPMediaItemPropertyTitle: title ?? channel.name,
             MPMediaItemPropertyArtist: channel.name, MPNowPlayingInfoPropertyIsLiveStream: true,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0]
@@ -260,13 +267,14 @@ actor PlaybackAudioSession {
 struct NativePlayerView: UIViewControllerRepresentable {
     let player: AVPlayer
     var controls = true
+    var pictureInPicture = true
     var onDisplayChange: ((Bool, AVPlayerItem?) -> Void)?
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
         controller.player = player; controller.showsPlaybackControls = controls
-        controller.allowsPictureInPicturePlayback = true
-        controller.canStartPictureInPictureAutomaticallyFromInline = true
+        controller.allowsPictureInPicturePlayback = pictureInPicture
+        controller.canStartPictureInPictureAutomaticallyFromInline = pictureInPicture
         context.coordinator.onDisplayChange = onDisplayChange
         context.coordinator.observation = controller.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak coordinator = context.coordinator] controller, _ in
             Task { @MainActor [weak coordinator, weak controller] in
@@ -285,5 +293,18 @@ struct NativePlayerView: UIViewControllerRepresentable {
     final class Coordinator {
         var observation: NSKeyValueObservation?
         var onDisplayChange: ((Bool, AVPlayerItem?) -> Void)?
+    }
+}
+
+/// A bare video surface for the mini player: no controls and no Picture in
+/// Picture, so it never competes with the full player for them.
+struct VideoLayerView: UIViewRepresentable {
+    let player: AVPlayer
+    func makeUIView(context: Context) -> LayerView { let view = LayerView(); view.playerLayer.player = player; view.playerLayer.videoGravity = .resizeAspectFill; return view }
+    func updateUIView(_ view: LayerView, context: Context) { if view.playerLayer.player !== player { view.playerLayer.player = player } }
+    static func dismantleUIView(_ view: LayerView, coordinator: ()) { view.playerLayer.player = nil }
+    final class LayerView: UIView {
+        override static var layerClass: AnyClass { AVPlayerLayer.self }
+        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
     }
 }
