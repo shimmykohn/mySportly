@@ -3,10 +3,13 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppStore.self) private var store
     @State private var choosingFollows = false
+    /// Height of the status and navigation bars, which the hero's colors fill.
+    @State private var topInset: CGFloat = 0
 
     var body: some View {
         let content = store.homeContent
         let isEmpty = content.hero.isEmpty && content.teamGames.isEmpty && content.leagueRows.isEmpty && content.channels.isEmpty
+        let showsHero = !content.hero.isEmpty && !(store.sources.isEmpty && !store.demo && !store.loading)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
                 if let error = store.personal.storageError {
@@ -21,11 +24,11 @@ struct HomeView: View {
                         Button("Connect a Source") { store.showSetup = true }.buttonStyle(.borderedProminent)
                     }
                 } else {
+                    if showsHero {
+                        HomeHeroPager(items: content.hero, topInset: topInset).accessibilityIdentifier("home-hero")
+                    }
                     if let latest = store.continueWatching.first {
                         HomeContinueCard(item: latest).padding(.horizontal)
-                    }
-                    if !content.hero.isEmpty {
-                        HomeHeroPager(items: content.hero).accessibilityIdentifier("home-hero")
                     }
                     if content.showsFollowPrompt {
                         ContentUnavailableView {
@@ -55,8 +58,12 @@ struct HomeView: View {
                     }
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.top, showsHero ? 0 : 8).padding(.bottom, 8)
         }
+        // The hero runs under the status and navigation bars. Measured outside
+        // the ignored edge, where the bars' height is still reported.
+        .ignoresSafeArea(edges: showsHero ? .top : [])
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
         .accessibilityIdentifier("home-root")
         // Verbatim: a localized key would format 1234 as "1,234".
         .accessibilityValue(Text(verbatim: "launch-ms=\(store.launchTimeline.milliseconds(to: .firstInteractive) ?? -1) ready=\(store.catalogReady ? 1 : 0)"))

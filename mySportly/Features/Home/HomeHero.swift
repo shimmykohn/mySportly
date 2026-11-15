@@ -1,7 +1,15 @@
 import SwiftUI
 
+extension EnvironmentValues {
+    /// Space the hero's art runs under at the top (status and navigation bars).
+    @Entry var heroTopInset: CGFloat = 0
+}
+
+/// Edge to edge, as in the TV app: each page's colors run up under the bars
+/// and fade into the page below.
 struct HomeHeroPager: View {
     let items: [HomeHero]
+    var topInset: CGFloat = 0
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
@@ -14,12 +22,11 @@ struct HomeHeroPager: View {
                     }
                 }
                 .playerSource("hero.\(item.id)")
-                .padding(.horizontal)
-                .padding(.bottom, items.count > 1 ? 36 : 0)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .always : .never))
-        .frame(height: (sizeClass == .regular ? 400 : 300) + (items.count > 1 ? 36 : 0))
+        .environment(\.heroTopInset, topInset)
+        .frame(height: (sizeClass == .regular ? 460 : 380) + topInset)
     }
 }
 
@@ -27,6 +34,7 @@ struct HomeHeroPager: View {
 struct HeroGameArt: View {
     let away: SportsTeam?
     let home: SportsTeam?
+    @Environment(\.heroTopInset) private var topInset
     @State private var awayColor: Color?
     @State private var homeColor: Color?
 
@@ -40,7 +48,7 @@ struct HeroGameArt: View {
                 }
                 .padding(.horizontal, 22).padding(.vertical, 12)
                 .glassEffect(in: .rect(cornerRadius: 24))
-                .padding(.top, 18)
+                .padding(.top, 18 + topInset)
             }
             .task(id: away?.logo) { awayColor = await color(away?.logo) }
             .task(id: home?.logo) { homeColor = await color(home?.logo) }
@@ -92,6 +100,7 @@ struct HeroGamePage: View {
 
 struct HeroChannelPage: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.heroTopInset) private var topInset
     let item: HomeChannel
 
     var body: some View {
@@ -101,7 +110,7 @@ struct HeroChannelPage: View {
                 LinearGradient(colors: [Color.accentColor.opacity(0.55), Color.secondary.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)
                     .overlay(alignment: .top) {
                         ChannelLogo(url: channel.logo).frame(width: 130, height: 76)
-                            .glassEffect(in: .rect(cornerRadius: 22)).padding(.top, 18)
+                            .glassEffect(in: .rect(cornerRadius: 22)).padding(.top, 18 + topInset)
                     }
             } details: {
                 Text(store.name(channel)).font(.subheadline).opacity(0.85)
@@ -117,17 +126,26 @@ struct HeroChannelPage: View {
     }
 }
 
-/// Artwork with a legible title area and actions along the bottom.
+/// Full-bleed artwork with the title and actions over it. The art darkens
+/// behind the text, then fades out into the page so the colors run on down.
 struct HeroCard<Art: View, Details: View, Actions: View>: View {
     @ViewBuilder let art: Art
     @ViewBuilder let details: Details
     @ViewBuilder let actions: Actions
+    static var fade: CGFloat { 72 }
 
     var body: some View {
         art
-            .overlay(alignment: .bottom) {
-                LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
+            .overlay {
+                LinearGradient(stops: [.init(color: .clear, location: 0.3), .init(color: .black.opacity(0.55), location: 0.85)],
+                               startPoint: .top, endPoint: .bottom)
                     .allowsHitTesting(false)
+            }
+            .mask {
+                VStack(spacing: 0) {
+                    Rectangle()
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: Self.fade)
+                }
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -135,9 +153,9 @@ struct HeroCard<Art: View, Details: View, Actions: View>: View {
                     HStack(spacing: 10) { actions }.padding(.top, 4)
                 }
                 .foregroundStyle(.white)
-                .padding(18)
+                .padding(.horizontal, 20)
+                .padding(.bottom, Self.fade - 8)
             }
-            .clipShape(.rect(cornerRadius: 26))
             .accessibilityElement(children: .contain)
     }
 }
