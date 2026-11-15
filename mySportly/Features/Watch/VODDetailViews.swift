@@ -10,9 +10,9 @@ struct MovieDetailView: View {
         let progress = store.progressItem(for: movie)
         let duration = detail?.duration ?? (progress.duration > 0 ? progress.duration : nil)
         ScrollView {
+            VODHero(artwork: movie.poster, backdrop: detail?.backdrop, title: movie.title,
+                    facts: [(movie.year ?? detail?.year).map(String.init), duration?.watchDuration, detail?.genre.nonEmpty, movie.rating.map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" }])
             VStack(alignment: .leading, spacing: 20) {
-                VODHeader(artwork: movie.poster, backdrop: detail?.backdrop, title: movie.title,
-                          facts: [(movie.year ?? detail?.year).map(String.init), duration?.watchDuration, detail?.genre.nonEmpty, movie.rating.map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" }])
                 VStack(spacing: 10) {
                     PlayButton(progress: progress) { store.play(movie) }
                     if progress.resumePosition != nil {
@@ -27,8 +27,8 @@ struct MovieDetailView: View {
             }
             .padding()
         }
-        .navigationTitle(movie.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .ignoresSafeArea(edges: .top)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .task { detail = await store.vod.detail(for: movie, provider: store.provider, demo: store.demo) }
     }
 }
@@ -45,9 +45,9 @@ struct SeriesDetailView: View {
         let progress = store.watchProgress
         let upNext = detail.flatMap { ContinueWatching.upNext(in: $0, progress: progress) }
         ScrollView {
+            VODHero(artwork: show.poster, backdrop: detail?.backdrop, title: show.title,
+                    facts: [show.year.map(String.init), detail.map { "\($0.seasons.count) \($0.seasons.count == 1 ? "Season" : "Seasons")" }, show.genre.nonEmpty])
             VStack(alignment: .leading, spacing: 20) {
-                VODHeader(artwork: show.poster, backdrop: detail?.backdrop, title: show.title,
-                          facts: [show.year.map(String.init), detail.map { "\($0.seasons.count) \($0.seasons.count == 1 ? "Season" : "Seasons")" }, show.genre.nonEmpty])
                 if let upNext, let detail {
                     let item = store.progressItem(for: upNext, of: show)
                     PlayButton(progress: item, label: upNext.code) { store.play(upNext, of: show, in: detail) }
@@ -75,8 +75,8 @@ struct SeriesDetailView: View {
             }
             .padding()
         }
-        .navigationTitle(show.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .ignoresSafeArea(edges: .top)
+        .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
         .task {
             detail = await store.vod.detail(for: show, provider: store.provider, demo: store.demo)
             loading = false
@@ -129,32 +129,40 @@ private struct EpisodeRow: View {
     }
 }
 
-/// Poster beside the title and facts, over a soft backdrop when there is one.
-private struct VODHeader: View {
+/// Artwork across the top, under the navigation bar and status bar, fading
+/// into the page with the title over it, as in the TV app.
+private struct VODHero: View {
     let artwork: URL?
     let backdrop: URL?
     let title: String
     let facts: [String?]
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 16) {
-            Poster(url: artwork, title: title).frame(width: 120).shadow(radius: 8, y: 4)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.title2.bold()).lineLimit(3)
-                let line = facts.compactMap { $0 }.joined(separator: " · ")
-                if !line.isEmpty { Text(line).font(.subheadline).foregroundStyle(.secondary) }
+        Color.clear
+            .frame(height: 480)
+            .overlay {
+                AsyncImage(url: backdrop ?? artwork) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else { Rectangle().fill(.fill.tertiary) }
+                }
             }
-            Spacer(minLength: 0)
-        }
-        .background(alignment: .top) {
-            if let backdrop {
-                AsyncImage(url: backdrop) { image in image.resizable().scaledToFill() } placeholder: { Color.clear }
-                    .frame(height: 180).clipped()
-                    .mask(LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .bottom))
-                    .padding(.horizontal, -16).padding(.top, -16)
-                    .accessibilityHidden(true)
+            .clipped()
+            .backgroundExtensionEffect()
+            .overlay {
+                LinearGradient(stops: [.init(color: .clear, location: 0.35), .init(color: .black.opacity(0.85), location: 1)],
+                               startPoint: .top, endPoint: .bottom)
             }
-        }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title).font(.largeTitle.bold()).lineLimit(3).minimumScaleFactor(0.7)
+                        .accessibilityAddTraits(.isHeader)
+                    let line = facts.compactMap { $0 }.joined(separator: " · ")
+                    if !line.isEmpty { Text(line).font(.subheadline.weight(.medium)).opacity(0.85) }
+                }
+                .foregroundStyle(.white)
+                .padding()
+            }
+            .accessibilityElement(children: .combine)
     }
 }
 
