@@ -1,0 +1,18 @@
+Scope: regular native Liquid Glass close controls with neutral tint.
+Date: October 18, 2026, America/New_York.
+
+Existing UI test: CatalogPerformanceUITests/testNativePlayerShowsTheFirstVideoFrame
+Physical iPad: PASS, 16.791 seconds.
+Physical iPhone: PASS, 15.804 seconds.
+Both xcodebuild invocations exited 0 and reported TEST SUCCEEDED.
+Built Debug with SWIFT_OPTIMIZATION_LEVEL=-O, Xcode 27.1.
+
+Verified: native player mounted, public HLS sample video ready, Change Channel navigation,
+Cancel, close-player dismissal, and compact-player Stop. Screenshots reviewed in light
+iPad and dark iPhone appearance. X is monochrome with native regular glass background.
+Durations include all XCTest actions and are not isolated playback startup measurements.
+Stream Options and Guide sheets use the same standard toolbar styling; those secondary
+sheets were not separately screenshot-tested in this targeted appearance pass.
+
+No simulator, paid model call, provider refresh, or private stream probe was used.
+App launched normally on both devices after demo testing.

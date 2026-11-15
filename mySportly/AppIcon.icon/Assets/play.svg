@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Play on the centre spot; rounded by a matching stroke. -->
+  <path d="M470 436 L470 588 L600 512 Z" fill="#17A34A" stroke="#17A34A" stroke-width="30" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,1080 @@
+{
+  "version": 1,
+  "fetchedAt": 1792377505.842783,
+  "leagues": [
+    {
+      "id": "apisports.american-football.1",
+      "name": "NFL",
+      "logo": "https://media.api-sports.io/american-football/leagues/1.png"
+    },
+    {
+      "id": "apisports.basketball.12",
+      "name": "NBA",
+      "logo": "https://media.api-sports.io/basketball/leagues/12.png"
+    },
+    {
+      "id": "apisports.baseball.1",
+      "name": "MLB",
+      "logo": "https://media.api-sports.io/baseball/leagues/1.png"
+    },
+    {
+      "id": "apisports.hockey.57",
+      "name": "NHL",
+      "logo": "https://media.api-sports.io/hockey/leagues/57.png"
+    },
+    {
+      "id": "apisports.football.253",
+      "name": "MLS",
+      "logo": "https://media.api-sports.io/football/leagues/253.png"
+    },
+    {
+      "id": "apisports.football.39",
+      "name": "Premier League",
+      "logo": "https://media.api-sports.io/football/leagues/39.png"
+    }
+  ],
+  "teams": [
+    {
+      "id": "apisports.american-football.team.1",
+      "name": "Las Vegas Raiders",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/1.png"
+    },
+    {
+      "id": "apisports.american-football.team.2",
+      "name": "Jacksonville Jaguars",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/2.png"
+    },
+    {
+      "id": "apisports.american-football.team.3",
+      "name": "New England Patriots",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/3.png"
+    },
+    {
+      "id": "apisports.american-football.team.4",
+      "name": "New York Giants",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/4.png"
+    },
+    {
+      "id": "apisports.american-football.team.5",
+      "name": "Baltimore Ravens",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/5.png"
+    },
+    {
+      "id": "apisports.american-football.team.6",
+      "name": "Tennessee Titans",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/6.png"
+    },
+    {
+      "id": "apisports.american-football.team.7",
+      "name": "Detroit Lions",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/7.png"
+    },
+    {
+      "id": "apisports.american-football.team.8",
+      "name": "Atlanta Falcons",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/8.png"
+    },
+    {
+      "id": "apisports.american-football.team.9",
+      "name": "Cleveland Browns",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/9.png"
+    },
+    {
+      "id": "apisports.american-football.team.10",
+      "name": "Cincinnati Bengals",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/10.png"
+    },
+    {
+      "id": "apisports.american-football.team.11",
+      "name": "Arizona Cardinals",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/11.png"
+    },
+    {
+      "id": "apisports.american-football.team.12",
+      "name": "Philadelphia Eagles",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/12.png"
+    },
+    {
+      "id": "apisports.american-football.team.13",
+      "name": "New York Jets",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/13.png"
+    },
+    {
+      "id": "apisports.american-football.team.14",
+      "name": "San Francisco 49ers",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/14.png"
+    },
+    {
+      "id": "apisports.american-football.team.15",
+      "name": "Green Bay Packers",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/15.png"
+    },
+    {
+      "id": "apisports.american-football.team.16",
+      "name": "Chicago Bears",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/16.png"
+    },
+    {
+      "id": "apisports.american-football.team.17",
+      "name": "Kansas City Chiefs",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/17.png"
+    },
+    {
+      "id": "apisports.american-football.team.18",
+      "name": "Washington Commanders",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/18.png"
+    },
+    {
+      "id": "apisports.american-football.team.19",
+      "name": "Carolina Panthers",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/19.png"
+    },
+    {
+      "id": "apisports.american-football.team.20",
+      "name": "Buffalo Bills",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/20.png"
+    },
+    {
+      "id": "apisports.american-football.team.21",
+      "name": "Indianapolis Colts",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/21.png"
+    },
+    {
+      "id": "apisports.american-football.team.22",
+      "name": "Pittsburgh Steelers",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/22.png"
+    },
+    {
+      "id": "apisports.american-football.team.23",
+      "name": "Seattle Seahawks",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/23.png"
+    },
+    {
+      "id": "apisports.american-football.team.24",
+      "name": "Tampa Bay Buccaneers",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/24.png"
+    },
+    {
+      "id": "apisports.american-football.team.25",
+      "name": "Miami Dolphins",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/25.png"
+    },
+    {
+      "id": "apisports.american-football.team.26",
+      "name": "Houston Texans",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/26.png"
+    },
+    {
+      "id": "apisports.american-football.team.27",
+      "name": "New Orleans Saints",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/27.png"
+    },
+    {
+      "id": "apisports.american-football.team.28",
+      "name": "Denver Broncos",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/28.png"
+    },
+    {
+      "id": "apisports.american-football.team.29",
+      "name": "Dallas Cowboys",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/29.png"
+    },
+    {
+      "id": "apisports.american-football.team.30",
+      "name": "Los Angeles Chargers",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/30.png"
+    },
+    {
+      "id": "apisports.american-football.team.31",
+      "name": "Los Angeles Rams",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/31.png"
+    },
+    {
+      "id": "apisports.american-football.team.32",
+      "name": "Minnesota Vikings",
+      "leagueID": "apisports.american-football.1",
+      "logo": "https://media.api-sports.io/american-football/teams/32.png"
+    },
+    {
+      "id": "apisports.basketball.team.132",
+      "name": "Atlanta Hawks",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/132.png"
+    },
+    {
+      "id": "apisports.basketball.team.133",
+      "name": "Boston Celtics",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/133.png"
+    },
+    {
+      "id": "apisports.basketball.team.134",
+      "name": "Brooklyn Nets",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/134.png"
+    },
+    {
+      "id": "apisports.basketball.team.135",
+      "name": "Charlotte Hornets",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/135.png"
+    },
+    {
+      "id": "apisports.basketball.team.136",
+      "name": "Chicago Bulls",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/136.png"
+    },
+    {
+      "id": "apisports.basketball.team.137",
+      "name": "Cleveland Cavaliers",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/137.png"
+    },
+    {
+      "id": "apisports.basketball.team.138",
+      "name": "Dallas Mavericks",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/138.png"
+    },
+    {
+      "id": "apisports.basketball.team.139",
+      "name": "Denver Nuggets",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/139.png"
+    },
+    {
+      "id": "apisports.basketball.team.140",
+      "name": "Detroit Pistons",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/140.png"
+    },
+    {
+      "id": "apisports.basketball.team.141",
+      "name": "Golden State Warriors",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/141.png"
+    },
+    {
+      "id": "apisports.basketball.team.142",
+      "name": "Houston Rockets",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/142.png"
+    },
+    {
+      "id": "apisports.basketball.team.143",
+      "name": "Indiana Pacers",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/143.png"
+    },
+    {
+      "id": "apisports.basketball.team.144",
+      "name": "Los Angeles Clippers",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/144.png"
+    },
+    {
+      "id": "apisports.basketball.team.145",
+      "name": "Los Angeles Lakers",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/145.png"
+    },
+    {
+      "id": "apisports.basketball.team.146",
+      "name": "Memphis Grizzlies",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/146.png"
+    },
+    {
+      "id": "apisports.basketball.team.147",
+      "name": "Miami Heat",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/147.png"
+    },
+    {
+      "id": "apisports.basketball.team.148",
+      "name": "Milwaukee Bucks",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/148.png"
+    },
+    {
+      "id": "apisports.basketball.team.149",
+      "name": "Minnesota Timberwolves",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/149.png"
+    },
+    {
+      "id": "apisports.basketball.team.150",
+      "name": "New Orleans Pelicans",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/150.png"
+    },
+    {
+      "id": "apisports.basketball.team.151",
+      "name": "New York Knicks",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/151.png"
+    },
+    {
+      "id": "apisports.basketball.team.152",
+      "name": "Oklahoma City Thunder",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/152.png"
+    },
+    {
+      "id": "apisports.basketball.team.153",
+      "name": "Orlando Magic",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/153.png"
+    },
+    {
+      "id": "apisports.basketball.team.154",
+      "name": "Philadelphia 76ers",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/154.png"
+    },
+    {
+      "id": "apisports.basketball.team.155",
+      "name": "Phoenix Suns",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/155.png"
+    },
+    {
+      "id": "apisports.basketball.team.156",
+      "name": "Portland Trail Blazers",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/156.png"
+    },
+    {
+      "id": "apisports.basketball.team.157",
+      "name": "Sacramento Kings",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/157.png"
+    },
+    {
+      "id": "apisports.basketball.team.158",
+      "name": "San Antonio Spurs",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/158.png"
+    },
+    {
+      "id": "apisports.basketball.team.159",
+      "name": "Toronto Raptors",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/159.png"
+    },
+    {
+      "id": "apisports.basketball.team.160",
+      "name": "Utah Jazz",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/160.png"
+    },
+    {
+      "id": "apisports.basketball.team.161",
+      "name": "Washington Wizards",
+      "leagueID": "apisports.basketball.12",
+      "logo": "https://media.api-sports.io/basketball/teams/161.png"
+    },
+    {
+      "id": "apisports.baseball.team.2",
+      "name": "Arizona Diamondbacks",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/2.png"
+    },
+    {
+      "id": "apisports.baseball.team.3",
+      "name": "Atlanta Braves",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/3.png"
+    },
+    {
+      "id": "apisports.baseball.team.4",
+      "name": "Baltimore Orioles",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/4.png"
+    },
+    {
+      "id": "apisports.baseball.team.5",
+      "name": "Boston Red Sox",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/5.png"
+    },
+    {
+      "id": "apisports.baseball.team.6",
+      "name": "Chicago Cubs",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/6.png"
+    },
+    {
+      "id": "apisports.baseball.team.7",
+      "name": "Chicago White Sox",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/7.png"
+    },
+    {
+      "id": "apisports.baseball.team.8",
+      "name": "Cincinnati Reds",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/8.png"
+    },
+    {
+      "id": "apisports.baseball.team.9",
+      "name": "Cleveland Guardians",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/9.png"
+    },
+    {
+      "id": "apisports.baseball.team.10",
+      "name": "Colorado Rockies",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/10.png"
+    },
+    {
+      "id": "apisports.baseball.team.12",
+      "name": "Detroit Tigers",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/12.png"
+    },
+    {
+      "id": "apisports.baseball.team.15",
+      "name": "Houston Astros",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/15.png"
+    },
+    {
+      "id": "apisports.baseball.team.16",
+      "name": "Kansas City Royals",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/16.png"
+    },
+    {
+      "id": "apisports.baseball.team.17",
+      "name": "Los Angeles Angels",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/17.png"
+    },
+    {
+      "id": "apisports.baseball.team.18",
+      "name": "Los Angeles Dodgers",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/18.png"
+    },
+    {
+      "id": "apisports.baseball.team.19",
+      "name": "Miami Marlins",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/19.png"
+    },
+    {
+      "id": "apisports.baseball.team.20",
+      "name": "Milwaukee Brewers",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/20.png"
+    },
+    {
+      "id": "apisports.baseball.team.22",
+      "name": "Minnesota Twins",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/22.png"
+    },
+    {
+      "id": "apisports.baseball.team.24",
+      "name": "New York Mets",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/24.png"
+    },
+    {
+      "id": "apisports.baseball.team.25",
+      "name": "New York Yankees",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/25.png"
+    },
+    {
+      "id": "apisports.baseball.team.26",
+      "name": "Oakland Athletics",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/26.png"
+    },
+    {
+      "id": "apisports.baseball.team.27",
+      "name": "Philadelphia Phillies",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/27.png"
+    },
+    {
+      "id": "apisports.baseball.team.28",
+      "name": "Pittsburgh Pirates",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/28.png"
+    },
+    {
+      "id": "apisports.baseball.team.30",
+      "name": "San Diego Padres",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/30.png"
+    },
+    {
+      "id": "apisports.baseball.team.31",
+      "name": "San Francisco Giants",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/31.png"
+    },
+    {
+      "id": "apisports.baseball.team.32",
+      "name": "Seattle Mariners",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/32.png"
+    },
+    {
+      "id": "apisports.baseball.team.33",
+      "name": "St.Louis Cardinals",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/33.png"
+    },
+    {
+      "id": "apisports.baseball.team.34",
+      "name": "Tampa Bay Rays",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/34.png"
+    },
+    {
+      "id": "apisports.baseball.team.35",
+      "name": "Texas Rangers",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/35.png"
+    },
+    {
+      "id": "apisports.baseball.team.36",
+      "name": "Toronto Blue Jays",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/36.png"
+    },
+    {
+      "id": "apisports.baseball.team.37",
+      "name": "Washington Nationals",
+      "leagueID": "apisports.baseball.1",
+      "logo": "https://media.api-sports.io/baseball/teams/37.png"
+    },
+    {
+      "id": "apisports.hockey.team.670",
+      "name": "Anaheim Ducks",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/670.png"
+    },
+    {
+      "id": "apisports.hockey.team.673",
+      "name": "Boston Bruins",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/673.png"
+    },
+    {
+      "id": "apisports.hockey.team.674",
+      "name": "Buffalo Sabres",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/674.png"
+    },
+    {
+      "id": "apisports.hockey.team.675",
+      "name": "Calgary Flames",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/675.png"
+    },
+    {
+      "id": "apisports.hockey.team.676",
+      "name": "Carolina Hurricanes",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/676.png"
+    },
+    {
+      "id": "apisports.hockey.team.678",
+      "name": "Chicago Blackhawks",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/678.png"
+    },
+    {
+      "id": "apisports.hockey.team.679",
+      "name": "Colorado Avalanche",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/679.png"
+    },
+    {
+      "id": "apisports.hockey.team.680",
+      "name": "Columbus Blue Jackets",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/680.png"
+    },
+    {
+      "id": "apisports.hockey.team.681",
+      "name": "Dallas Stars",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/681.png"
+    },
+    {
+      "id": "apisports.hockey.team.682",
+      "name": "Detroit Red Wings",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/682.png"
+    },
+    {
+      "id": "apisports.hockey.team.683",
+      "name": "Edmonton Oilers",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/683.png"
+    },
+    {
+      "id": "apisports.hockey.team.684",
+      "name": "Florida Panthers",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/684.png"
+    },
+    {
+      "id": "apisports.hockey.team.685",
+      "name": "Los Angeles Kings",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/685.png"
+    },
+    {
+      "id": "apisports.hockey.team.687",
+      "name": "Minnesota Wild",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/687.png"
+    },
+    {
+      "id": "apisports.hockey.team.688",
+      "name": "Montreal Canadiens",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/688.png"
+    },
+    {
+      "id": "apisports.hockey.team.689",
+      "name": "Nashville Predators",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/689.png"
+    },
+    {
+      "id": "apisports.hockey.team.690",
+      "name": "New Jersey Devils",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/690.png"
+    },
+    {
+      "id": "apisports.hockey.team.691",
+      "name": "New York Islanders",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/691.png"
+    },
+    {
+      "id": "apisports.hockey.team.692",
+      "name": "New York Rangers",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/692.png"
+    },
+    {
+      "id": "apisports.hockey.team.693",
+      "name": "Ottawa Senators",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/693.png"
+    },
+    {
+      "id": "apisports.hockey.team.695",
+      "name": "Philadelphia Flyers",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/695.png"
+    },
+    {
+      "id": "apisports.hockey.team.696",
+      "name": "Pittsburgh Penguins",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/696.png"
+    },
+    {
+      "id": "apisports.hockey.team.697",
+      "name": "San Jose Sharks",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/697.png"
+    },
+    {
+      "id": "apisports.hockey.team.1436",
+      "name": "Seattle Kraken",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/1436.png"
+    },
+    {
+      "id": "apisports.hockey.team.698",
+      "name": "St. Louis Blues",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/698.png"
+    },
+    {
+      "id": "apisports.hockey.team.699",
+      "name": "Tampa Bay Lightning",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/699.png"
+    },
+    {
+      "id": "apisports.hockey.team.700",
+      "name": "Toronto Maple Leafs",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/700.png"
+    },
+    {
+      "id": "apisports.hockey.team.2483",
+      "name": "Utah Mammoth",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/2483.png"
+    },
+    {
+      "id": "apisports.hockey.team.701",
+      "name": "Vancouver Canucks",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/701.png"
+    },
+    {
+      "id": "apisports.hockey.team.702",
+      "name": "Vegas Golden Knights",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/702.png"
+    },
+    {
+      "id": "apisports.hockey.team.703",
+      "name": "Washington Capitals",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/703.png"
+    },
+    {
+      "id": "apisports.hockey.team.704",
+      "name": "Winnipeg Jets",
+      "leagueID": "apisports.hockey.57",
+      "logo": "https://media.api-sports.io/hockey/teams/704.png"
+    },
+    {
+      "id": "apisports.football.team.1595",
+      "name": "Seattle Sounders",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1595.png"
+    },
+    {
+      "id": "apisports.football.team.1596",
+      "name": "San Jose Earthquakes",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1596.png"
+    },
+    {
+      "id": "apisports.football.team.1597",
+      "name": "FC Dallas",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1597.png"
+    },
+    {
+      "id": "apisports.football.team.1598",
+      "name": "Orlando City SC",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1598.png"
+    },
+    {
+      "id": "apisports.football.team.1599",
+      "name": "Philadelphia Union",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1599.png"
+    },
+    {
+      "id": "apisports.football.team.1600",
+      "name": "Houston Dynamo",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1600.png"
+    },
+    {
+      "id": "apisports.football.team.1601",
+      "name": "Toronto FC",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1601.png"
+    },
+    {
+      "id": "apisports.football.team.1602",
+      "name": "New York Red Bulls",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1602.png"
+    },
+    {
+      "id": "apisports.football.team.1603",
+      "name": "Vancouver Whitecaps",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1603.png"
+    },
+    {
+      "id": "apisports.football.team.1604",
+      "name": "New York City FC",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1604.png"
+    },
+    {
+      "id": "apisports.football.team.1605",
+      "name": "Los Angeles Galaxy",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1605.png"
+    },
+    {
+      "id": "apisports.football.team.1606",
+      "name": "Real Salt Lake",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1606.png"
+    },
+    {
+      "id": "apisports.football.team.1607",
+      "name": "Chicago Fire",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1607.png"
+    },
+    {
+      "id": "apisports.football.team.1608",
+      "name": "Atlanta United FC",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1608.png"
+    },
+    {
+      "id": "apisports.football.team.1609",
+      "name": "New England Revolution",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1609.png"
+    },
+    {
+      "id": "apisports.football.team.1610",
+      "name": "Colorado Rapids",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1610.png"
+    },
+    {
+      "id": "apisports.football.team.1611",
+      "name": "Sporting Kansas City",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1611.png"
+    },
+    {
+      "id": "apisports.football.team.1612",
+      "name": "Minnesota United FC",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1612.png"
+    },
+    {
+      "id": "apisports.football.team.1613",
+      "name": "Columbus Crew",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1613.png"
+    },
+    {
+      "id": "apisports.football.team.1614",
+      "name": "CF Montreal",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1614.png"
+    },
+    {
+      "id": "apisports.football.team.1615",
+      "name": "DC United",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1615.png"
+    },
+    {
+      "id": "apisports.football.team.1616",
+      "name": "Los Angeles FC",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1616.png"
+    },
+    {
+      "id": "apisports.football.team.1617",
+      "name": "Portland Timbers",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/1617.png"
+    },
+    {
+      "id": "apisports.football.team.2242",
+      "name": "FC Cincinnati",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/2242.png"
+    },
+    {
+      "id": "apisports.football.team.9568",
+      "name": "Inter Miami",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/9568.png"
+    },
+    {
+      "id": "apisports.football.team.9569",
+      "name": "Nashville SC",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/9569.png"
+    },
+    {
+      "id": "apisports.football.team.16489",
+      "name": "Austin",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/16489.png"
+    },
+    {
+      "id": "apisports.football.team.18310",
+      "name": "Charlotte",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/18310.png"
+    },
+    {
+      "id": "apisports.football.team.20787",
+      "name": "St. Louis City",
+      "leagueID": "apisports.football.253",
+      "logo": "https://media.api-sports.io/football/teams/20787.png"
+    },
+    {
+      "id": "apisports.football.team.33",
+      "name": "Manchester United",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/33.png"
+    },
+    {
+      "id": "apisports.football.team.34",
+      "name": "Newcastle",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/34.png"
+    },
+    {
+      "id": "apisports.football.team.35",
+      "name": "Bournemouth",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/35.png"
+    },
+    {
+      "id": "apisports.football.team.36",
+      "name": "Fulham",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/36.png"
+    },
+    {
+      "id": "apisports.football.team.39",
+      "name": "Wolves",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/39.png"
+    },
+    {
+      "id": "apisports.football.team.40",
+      "name": "Liverpool",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/40.png"
+    },
+    {
+      "id": "apisports.football.team.41",
+      "name": "Southampton",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/41.png"
+    },
+    {
+      "id": "apisports.football.team.42",
+      "name": "Arsenal",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/42.png"
+    },
+    {
+      "id": "apisports.football.team.45",
+      "name": "Everton",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/45.png"
+    },
+    {
+      "id": "apisports.football.team.46",
+      "name": "Leicester",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/46.png"
+    },
+    {
+      "id": "apisports.football.team.47",
+      "name": "Tottenham",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/47.png"
+    },
+    {
+      "id": "apisports.football.team.48",
+      "name": "West Ham",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/48.png"
+    },
+    {
+      "id": "apisports.football.team.49",
+      "name": "Chelsea",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/49.png"
+    },
+    {
+      "id": "apisports.football.team.50",
+      "name": "Manchester City",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/50.png"
+    },
+    {
+      "id": "apisports.football.team.51",
+      "name": "Brighton",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/51.png"
+    },
+    {
+      "id": "apisports.football.team.52",
+      "name": "Crystal Palace",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/52.png"
+    },
+    {
+      "id": "apisports.football.team.55",
+      "name": "Brentford",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/55.png"
+    },
+    {
+      "id": "apisports.football.team.57",
+      "name": "Ipswich",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/57.png"
+    },
+    {
+      "id": "apisports.football.team.65",
+      "name": "Nottingham Forest",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/65.png"
+    },
+    {
+      "id": "apisports.football.team.66",
+      "name": "Aston Villa",
+      "leagueID": "apisports.football.39",
+      "logo": "https://media.api-sports.io/football/teams/66.png"
+    }
+  ],
+  "games": [],
+  "issues": {
+    "Reference data": "Team and logo references use the free plan’s available 2024 data. Current games come from your TV guide. Some newer teams or competitions may have no logo."
+  }
+}
