@@ -129,3 +129,12 @@ struct VODShelfTests {
         #expect(VODShelf.search("h", in: movies).isEmpty)
     }
 }
+
+struct VODFormatTests {
+    @Test func unsupportedContainersAskForHLS() {
+        #expect(VODFormat.requested("MP4") == "mp4")
+        #expect(VODFormat.requested("mkv") == "m3u8")
+        #expect(VODFormat.requested("avi") == "m3u8")
+        #expect(!VODFormat.isNative("webm"))
+    }
+}

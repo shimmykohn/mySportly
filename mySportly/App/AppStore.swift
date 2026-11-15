@@ -725,7 +725,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         do {
             guard demo || sources.contains(where: { $0.id == item.sourceID }) else { throw CatalogError.rejected }
             let url = demo ? SampleVOD.streamURL
-                : try provider.vodURL(kind: item.kind, providerID: item.providerID, container: item.container,
+                : try provider.vodURL(kind: item.kind, providerID: item.providerID, container: VODFormat.requested(item.container),
                                       secrets: KeychainStore.credentials(item.sourceID) ?? SourceSecrets())
             if watchingTwo { stopSecond() }
             let channel = Channel(id: item.itemID, sourceID: item.sourceID, name: item.title, logo: item.artwork)
@@ -870,6 +870,12 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         } catch { inform("Variants weren’t separated", error.localizedDescription) }
     }
     private func offerAlternate() {
+        if let item = nowPlayingVOD {
+            if !VODFormat.isNative(item.container) {
+                playback.errorMessage = "This title is a \(item.container.uppercased()) file, which iPhone can’t play, and your provider didn’t offer a version it can."
+            }
+            return
+        }
         guard let channel = playback.channel else { return }
         let available = variants(of: channel).filter { $0.id != channel.id }
         if !available.isEmpty {

@@ -53,6 +53,7 @@ struct PlaybackAlternative {
     private var pendingStart: Double?
     private var endObserver: NSObjectProtocol?
     private var progressObserver: Any?
+    private var startTimeout: Task<Void, Never>?
     func setMuted(_ on: Bool) { muted = on; player.isMuted = on }
 
     init(secondary: Bool = false) {
@@ -65,7 +66,7 @@ struct PlaybackAlternative {
                     self.wantsPlayback = false
                 }
                 self.isLoading = self.wantsPlayback && (!self.audioReady || player.timeControlStatus == .waitingToPlayAtSpecifiedRate)
-                if self.isPlaying { self.stallTask?.cancel(); self.stallTask = nil }
+                if self.isPlaying { self.stallTask?.cancel(); self.stallTask = nil; self.startTimeout?.cancel(); self.startTimeout = nil }
                 self.updateNowPlaying()
             }
         }
@@ -84,6 +85,7 @@ struct PlaybackAlternative {
         reportProgress()
         cancelPending()
         isLive = live; pendingStart = startAt; reachedEnd = false
+        if !live { watchStart() }
         self.channel = channel; currentURL = url; self.title = title; self.preferredLanguage = preferredLanguage
         alternatives = Array(alternates.filter { $0.channel.id != channel.id }.prefix(2))
         videoUnavailable = false; playbackNotice = nil
@@ -218,9 +220,36 @@ struct PlaybackAlternative {
         guard let group = try? await item.asset.loadMediaSelectionGroup(for: .audible), sessionID == token, player.currentItem === item else { return }
         if let option = group.options.first(where: { $0.extendedLanguageTag?.hasPrefix(preferredLanguage) == true || $0.locale?.language.languageCode?.identifier == preferredLanguage }) { item.select(option, in: group) }
     }
+    /// A movie or episode that hasn't started after 30 s won't: say so
+    /// instead of showing "Connecting…" indefinitely.
+    private func watchStart() {
+        let token = sessionID
+        startTimeout = Task {
+            do { try await Task.sleep(for: .seconds(30)) } catch { return }
+            guard sessionID == token, wantsPlayback, !isLive, !isPlaying else { return }
+            fail("This title didn’t start. Your provider may not be sending it right now; try again later or choose another title.")
+        }
+    }
+    private func fail(_ message: String) {
+        wantsPlayback = false; isLoading = false; isPlaying = false
+        retryTask?.cancel(); retryTask = nil
+        player.pause()
+        errorMessage = message; onFailure?()
+    }
+    /// Network trouble is worth retrying; a file the player can't read isn't.
+    private func isNetworkFailure(_ error: Error?) -> Bool {
+        var current = error as NSError?
+        for _ in 0..<8 {
+            guard let error = current else { return false }
+            if error.domain == NSURLErrorDomain { return true }
+            current = error.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return false
+    }
     private func recover() {
         guard wantsPlayback, retryTask == nil, currentURL != nil else { return }
         let failure = PlaybackFailure(error: player.currentItem?.error)
+        if !isLive, failure.httpStatus == nil, !isNetworkFailure(player.currentItem?.error) { fail(failure.message); return }
         guard failure.shouldRetry, attempts < 3 else {
             wantsPlayback = false; isLoading = false; isPlaying = false
             player.pause()
@@ -236,7 +265,11 @@ struct PlaybackAlternative {
             retryTask = nil; replaceItem()
         }
     }
-    func retry() { cancelPending(); attempts = 0; errorMessage = nil; videoUnavailable = false; playbackNotice = nil; wantsPlayback = true; preparePlayback() }
+    func retry() {
+        cancelPending(); attempts = 0; errorMessage = nil; videoUnavailable = false; playbackNotice = nil; wantsPlayback = true
+        if !isLive { watchStart() }
+        preparePlayback()
+    }
     func toggle() { isPlaying ? pause() : resume() }
     func pause() {
         reportProgress()
@@ -260,7 +293,7 @@ struct PlaybackAlternative {
         alternatives = []; playbackNotice = nil; videoUnavailable = false; isLive = true; pendingStart = nil; reachedEnd = false
         if !secondary { MPNowPlayingInfoCenter.default().nowPlayingInfo = nil }
     }
-    private func cancelPending() { sessionID = UUID(); retryTask?.cancel(); retryTask = nil; preparationTask?.cancel(); preparationTask = nil; stallTask?.cancel(); stallTask = nil; videoTask?.cancel(); videoTask = nil }
+    private func cancelPending() { sessionID = UUID(); startTimeout?.cancel(); startTimeout = nil; retryTask?.cancel(); retryTask = nil; preparationTask?.cancel(); preparationTask = nil; stallTask?.cancel(); stallTask = nil; videoTask?.cancel(); videoTask = nil }
     private func clearItemObservers() {
         videoTask?.cancel(); videoTask = nil
         itemObservation = nil
