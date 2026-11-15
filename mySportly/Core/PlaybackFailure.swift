@@ -33,6 +33,9 @@ public struct PlaybackFailure: Equatable, Sendable {
             "The provider refused access to this stream (HTTP \(httpStatus!)). Check your source or subscription."
         case 404, 410:
             "This stream is unavailable from your provider (HTTP \(httpStatus!)). Choose another stream or refresh your playlist."
+        case 456, 458, 460, 461, 462:
+            // Non-standard codes IPTV panels use when an account is at its stream limit.
+            "Your provider says this account is busy (HTTP \(httpStatus!)). It may be streaming on another device or app, or a stream just closed hasn’t been released yet. Stop other streams, wait a minute, then try again."
         case 429:
             "The provider is receiving too many requests. Wait a moment before trying again."
         case 500, 502, 503, 504:
