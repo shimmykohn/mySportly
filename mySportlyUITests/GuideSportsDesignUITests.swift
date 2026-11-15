@@ -6,9 +6,11 @@ import UIKit
         continueAfterFailure = false
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
     }
-    func testSavedGuideOpensWithListingsAndFiltersAreSeparate() {
+    func testSavedGuideOpensWithListingsAndFiltersAreSeparate() throws {
         let app = XCUIApplication()
         app.launch()
+        XCTAssertTrue(app.descendants(matching: .any)["home-root"].firstMatch.waitForExistence(timeout: 30))
+        if app.buttons["Connect a Source"].exists || app.navigationBars["Welcome"].exists { throw XCTSkip("Requires a saved provider catalog") }
         waitForCatalog(app)
         app.selectMainTab("Guide")
         let count = app.staticTexts["guide-channel-count"].firstMatch

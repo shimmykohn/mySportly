@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- A field seen from above: halfway line and centre circle cut out. -->
+  <path fill="#FFFFFF" fill-rule="evenodd" d="
+    M268 262 H756 A96 96 0 0 1 852 358 V666 A96 96 0 0 1 756 762 H268 A96 96 0 0 1 172 666 V358 A96 96 0 0 1 268 262 Z
+    M499 262 H525 V362 H499 Z
+    M499 662 H525 V762 H499 Z
+    M512 362 A150 150 0 1 0 512 662 A150 150 0 1 0 512 362 Z
+    M512 388 A124 124 0 1 1 512 636 A124 124 0 1 1 512 388 Z"/>
+</svg>

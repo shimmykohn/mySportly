@@ -15,7 +15,7 @@ import Testing
     @Test func decisionsSurviveChangedStreamIDsQualityAndFewerSlots() throws {
         let original = try grouped([channel("old1", ":Golf 07 HD"), channel("old2", ":Golf 08 4K")])
         let group = try #require(original.groups.first)
-        let placement = GroupPlacement(group: group, path: ["Sports", "Golf"], confidence: 0.95, status: .classified, origin: "Jev")
+        let placement = GroupPlacement(group: group, path: ["Sports", "Golf"], confidence: 0.95, status: .classified, origin: "OpenAI")
         let next = try grouped([channel("new", ":Golf 10 FHD")], placements: [group.id: placement])
         #expect(next.groups.count == 1)
         #expect(next.groups[0].id == group.id)
@@ -36,7 +36,7 @@ import Testing
     }
     @Test func changedProviderContextRechecksMachineButKeepsManualDecision() throws {
         let group = try #require(grouped([channel("a", "ABC HD", group: "News")]).groups.first)
-        let placement = GroupPlacement(group: group, path: ["News"], confidence: 1, status: .classified, origin: "Jev")
+        let placement = GroupPlacement(group: group, path: ["News"], confidence: 1, status: .classified, origin: "OpenAI")
         let next = try grouped([channel("b", "ABC 4K", group: "Movies")], placements: [group.id: placement])
         #expect(next.pending(in: .init()).count == 1)
         #expect(next.path(for: "b") == ["Movies"])
@@ -148,7 +148,7 @@ import Testing
     @Test func explicitSlotsKeepIdentityWhenEventNamesAndDatesChange() throws {
         let original = try grouped([channel("old", "US (NEWLEAGUE 02) | Red vs Blue (2026-10-18 18:00:00)", group: "Sports")])
         let group = try #require(original.groups.first)
-        let saved = GroupPlacement(group: group, path: ["Sports", "American Football", "NEWLEAGUE"], confidence: 0.9, status: .classified, origin: "Jev")
+        let saved = GroupPlacement(group: group, path: ["Sports", "American Football", "NEWLEAGUE"], confidence: 0.9, status: .classified, origin: "OpenAI")
         let updated = try grouped([channel("new", "US (NEWLEAGUE 45) | Green vs Gold (2026-10-20 19:00:00)", group: "Sports")], placements: [group.id: saved])
         #expect(updated.groups.first?.id == group.id)
         #expect(updated.pending(in: .init()).isEmpty)
@@ -160,7 +160,7 @@ import Testing
         let channels = [channel("one", "US MTV", group: "Entertainment"), channel("two", "US MTV 2", group: "Entertainment")]
         let original = try grouped(channels)
         let group = try #require(original.groups.first { $0.channelIDs == ["one"] })
-        let saved = GroupPlacement(group: group, path: ["Music"], confidence: 1, status: .classified, origin: "Jev")
+        let saved = GroupPlacement(group: group, path: ["Music"], confidence: 1, status: .classified, origin: "OpenAI")
         let next = try grouped(channels, placements: [group.id: saved])
         #expect(next.groups.count == original.groups.count)
         #expect(next.channelGroup == original.channelGroup)
@@ -196,7 +196,7 @@ import Testing
     @Test func reviewResultsAreReusableButOlderPolicyVersionsNeedRechecking() throws {
         let channels = [channel("1", "Unfamiliar title", group: "")]
         let group = try #require(grouped(channels).groups.first)
-        var saved = GroupPlacement(group: group, path: ["News"], confidence: 0.3, status: .needsReview, origin: "Jev")
+        var saved = GroupPlacement(group: group, path: ["News"], confidence: 0.3, status: .needsReview, origin: "OpenAI")
         #expect(saved.isReusable(for: group))
         #expect(try grouped(channels, placements: [group.id: saved]).pending(in: .init()).isEmpty)
         saved.decisionVersion = nil

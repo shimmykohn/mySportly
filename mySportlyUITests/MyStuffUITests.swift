@@ -37,8 +37,7 @@ import UIKit
         app.selectMainTab("Home")
         XCTAssertTrue(app.descendants(matching: .any)["home-teams"].waitForExistence(timeout: 10))
         app.selectMainTab("My Stuff")
-        team.swipeLeft()
-        app.buttons["Unfollow"].tap()
+        app.revealSwipeAction("Unfollow", on: team)
         XCTAssertTrue(team.waitForNonExistence(timeout: 5))
     }
 
@@ -52,8 +51,7 @@ import UIKit
         XCTAssertTrue(channel.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["my-stuff-league-NBA"].exists)
         capture("My Stuff sections")
-        channel.swipeLeft()
-        app.buttons["Remove Favorite"].tap()
+        app.revealSwipeAction("Remove Favorite", on: channel)
         XCTAssertTrue(channel.waitForNonExistence(timeout: 5))
         app.selectMainTab("Home")
         XCTAssertFalse(app.buttons["home-channel-sample.0"].exists)

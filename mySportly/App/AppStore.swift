@@ -116,7 +116,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     var regions: [String] { personal.value("preferences.regions", default: [Locale.current.region?.identifier ?? "US"]) }
     var lineupScope: LineupScope { LineupScope(rawValue: personal.value("preferences.lineupScope", default: LineupScope.preferred.rawValue)) ?? .preferred }
     var audience: ChannelAudience { ChannelAudience(scope: lineupScope, languages: languages, regions: regions, includeUnknownLanguage: personal.value("preferences.includeUnknownLanguage", default: true)) }
-    // Browsing All Channels never authorizes sending other regions to Jev.
+    // Browsing All Channels never authorizes sending other regions to OpenAI.
     var organizationAudience: ChannelAudience { ChannelAudience(scope: .preferred, languages: languages, regions: regions, includeUnknownLanguage: personal.value("preferences.includeUnknownLanguage", default: true)) }
     var organizationPaths: [[String]] {
         // Existing organizers retain their starting choices. New profiles choose

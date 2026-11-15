@@ -5,6 +5,9 @@ import UIKit
 /// Uses saved data only; never imports a source or starts playback.
 @MainActor final class CatalogPerformanceUITests: XCTestCase {
     override func setUpWithError() throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Catalog timings are judged on a physical device with a real catalog.")
+        #endif
         continueAfterFailure = false
         XCUIDevice.shared.orientation = UIDevice.current.userInterfaceIdiom == .pad ? .landscapeLeft : .portrait
     }
@@ -64,15 +67,8 @@ import UIKit
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launch()
-        let loading = app.descendants(matching: .any)["catalog-loading"].firstMatch
-        let ready = NSPredicate { _, _ in !loading.exists }
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: ready, evaluatedWith: nil)], timeout: 90), .completed)
-        if app.buttons["Connect a Source"].firstMatch.exists { throw XCTSkip("Requires a saved provider catalog") }
-        let channels = app.buttons["all-channels-link"].firstMatch
-        if channels.exists, let count = channels.value as? String {
-            print("[CatalogPerformance] saved_lineup=\(count)")
-            if (Int(count.filter(\.isNumber)) ?? 0) < 50_000 { throw XCTSkip("Requires a large saved provider catalog") }
-        }
+        if app.buttons["Connect a Source"].firstMatch.waitForExistence(timeout: 5) { throw XCTSkip("Requires a saved provider catalog") }
+        app.waitForSavedCatalog()
         return app
     }
 

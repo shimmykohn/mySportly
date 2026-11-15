@@ -35,4 +35,15 @@ extension XCUIApplication {
         XCTAssertTrue(cell.waitForExistence(timeout: 10), "Missing native tab or sidebar item: \(title)", file: file, line: line)
         cell.tap()
     }
+
+    /// Swipes a row until its trailing action shows, then taps it. A swipe that
+    /// lands while the list is still settling sometimes doesn't open the row.
+    @MainActor func revealSwipeAction(_ title: String, on row: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        let action = buttons[title].firstMatch
+        for _ in 0..<3 {
+            row.swipeLeft()
+            if action.waitForExistence(timeout: 2) { action.tap(); return }
+        }
+        XCTFail("Swipe action \(title) never appeared", file: file, line: line)
+    }
 }

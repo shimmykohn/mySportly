@@ -24,7 +24,7 @@ The first launch offers **Connect a Source** and **Explore Sample Catalog**. Ent
 
 ## Integration setup
 
-The app uses no mySportly account. CloudKit uses `iCloud.app.iska.mysportly`. The `group.app.iska.mysportly` App Group entitlement is still present but no longer used (it served the removed widget). Existing personal data stays local when cloud initialization fails. **Sync Personal Choices** takes effect after closing and reopening the app. Source secrets and the OpenAI key use the Keychain; provider caches are encrypted and excluded from backup.
+The app uses no mySportly account. CloudKit uses `iCloud.app.iska.mysportly`. Existing personal data stays local when cloud initialization fails. **Sync Personal Choices** takes effect after closing and reopening the app. Source secrets and the OpenAI key use the Keychain; provider caches are encrypted and excluded from backup.
 
 ## Verification
 

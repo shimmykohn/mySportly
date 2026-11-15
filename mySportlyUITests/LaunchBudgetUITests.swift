@@ -4,6 +4,10 @@ import XCTest
 /// makes no provider request before its first frame, so no source is touched.
 @MainActor final class LaunchBudgetUITests: XCTestCase {
     func testSavedCatalogHomeIsInteractiveWithinBudget() throws {
+        #if targetEnvironment(simulator)
+        // XCUITest turns on accessibility automation, which inflates simulator launches by seconds.
+        throw XCTSkip("The launch budget is judged on a physical device.")
+        #endif
         continueAfterFailure = false
         let app = XCUIApplication()
         // The first launch after an update writes the launch snapshot; the
