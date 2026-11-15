@@ -269,6 +269,8 @@ struct NativePlayerView: UIViewControllerRepresentable {
     var controls = true
     var pictureInPicture = true
     var onDisplayChange: ((Bool, AVPlayerItem?) -> Void)?
+    /// Taps on the video, alongside the player's own show/hide controls.
+    var onTap: (() -> Void)?
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIViewController(context: Context) -> AVPlayerViewController {
         let controller = AVPlayerViewController()
@@ -276,6 +278,10 @@ struct NativePlayerView: UIViewControllerRepresentable {
         controller.allowsPictureInPicturePlayback = pictureInPicture
         controller.canStartPictureInPictureAutomaticallyFromInline = pictureInPicture
         context.coordinator.onDisplayChange = onDisplayChange
+        context.coordinator.onTap = onTap
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped))
+        tap.cancelsTouchesInView = false; tap.delegate = context.coordinator
+        controller.view.addGestureRecognizer(tap)
         context.coordinator.observation = controller.observe(\.isReadyForDisplay, options: [.initial, .new]) { [weak coordinator = context.coordinator] controller, _ in
             Task { @MainActor [weak coordinator, weak controller] in
                 guard let controller else { return }
@@ -288,11 +294,15 @@ struct NativePlayerView: UIViewControllerRepresentable {
         if controller.player !== player { controller.player = player }
         controller.showsPlaybackControls = controls
         context.coordinator.onDisplayChange = onDisplayChange
+        context.coordinator.onTap = onTap
     }
-    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) { coordinator.observation = nil; coordinator.onDisplayChange = nil; controller.player = nil }
-    final class Coordinator {
+    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) { coordinator.observation = nil; coordinator.onDisplayChange = nil; coordinator.onTap = nil; controller.player = nil }
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var observation: NSKeyValueObservation?
         var onDisplayChange: ((Bool, AVPlayerItem?) -> Void)?
+        var onTap: (() -> Void)?
+        @objc func tapped() { onTap?() }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
     }
 }
 

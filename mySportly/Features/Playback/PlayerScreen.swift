@@ -49,9 +49,11 @@ struct PlayerScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var choosingSecond = false
+    @State private var showsStreamsButton = false
+    @State private var hideStreams: Task<Void, Never>?
 
     var body: some View {
-        let video = NativePlayerView(player: store.playback.player, onDisplayChange: store.playback.videoDisplayChanged)
+        let video = NativePlayerView(player: store.playback.player, onDisplayChange: store.playback.videoDisplayChanged, onTap: revealStreams)
             .accessibilityLabel("Native video player")
             .accessibilityIdentifier("stream-preview")
             .accessibilityValue(store.playback.hasVideoFrame ? "Video ready" : "Waiting for video")
@@ -66,6 +68,16 @@ struct PlayerScreen: View {
                     .ignoresSafeArea().background(.black)
                 } else {
                     video.ignoresSafeArea().background(.black)
+                        // The native controls can't hold our menu on iPhone, so a
+                        // Streams button shows on tap and fades with them.
+                        .overlay(alignment: .topTrailing) {
+                            if showsStreamsButton {
+                                // Opening the menu keeps it up until the next tap on the video.
+                                StreamsMenu().simultaneousGesture(TapGesture().onEnded { hideStreams?.cancel() })
+                                    .padding(.top, 8).padding(.trailing, 16).transition(.opacity)
+                            }
+                        }
+                        .onAppear(perform: revealStreams)
                 }
             } else {
                 VStack(spacing: 0) {
@@ -101,6 +113,17 @@ struct PlayerScreen: View {
             }
         }
         .sheet(isPresented: $choosingSecond) { SecondStreamPicker() }
+    }
+
+    private func revealStreams() {
+        guard verticalSizeClass == .compact else { return }
+        withAnimation(.easeOut(duration: 0.2)) { showsStreamsButton = true }
+        hideStreams?.cancel()
+        hideStreams = Task {
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.3)) { showsStreamsButton = false }
+        }
     }
 }
 
@@ -179,7 +202,6 @@ private struct PlayerDetails: View {
                     Text(store.playerTitle).font(.headline).lineLimit(2)
                         .accessibilityIdentifier("player-title")
                         .accessibilityValue(Text(verbatim: playback.channel?.id ?? ""))
-                    if !store.playerSubtitle.isEmpty { Text(store.playerSubtitle).font(.subheadline).foregroundStyle(.secondary) }
                 }
                 Spacer()
                 if let channel = playback.channel {
@@ -189,20 +211,11 @@ private struct PlayerDetails: View {
                         .accessibilityIdentifier("player-favorite")
                 }
             }
-            let feeds = store.playerFeeds
-            if feeds.count > 1, let current = playback.channel {
-                Menu {
-                    Picker("Stream", selection: Binding(get: { current.id }, set: { store.selectPlayerFeed($0) })) {
-                        ForEach(feeds) { feed in Text(feedLabel(feed, in: feeds)).tag(feed.id) }
-                    }
-                } label: {
-                    Label {
-                        Text("Stream: \(feedLabel(current, in: feeds))").lineLimit(1)
-                    } icon: { Image(systemName: "antenna.radiowaves.left.and.right") }
-                    .font(.subheadline.weight(.semibold))
-                }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("player-stream-picker")
+            // What's playing, with the other streams one tap away.
+            HStack(spacing: 10) {
+                Text(store.playerSubtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 0)
+                StreamsMenu()
             }
             if let error = playback.errorMessage {
                 HStack {
@@ -226,6 +239,29 @@ private struct PlayerDetails: View {
                 }
                 .accessibilityElement(children: .combine)
             }
+        }
+    }
+}
+
+/// "Streams": the feeds for what's playing, current one checked. Hidden when
+/// there's only one.
+struct StreamsMenu: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        let feeds = store.playerFeeds
+        if feeds.count > 1, let current = store.playback.channel {
+            Menu {
+                Picker("Streams", selection: Binding(get: { current.id }, set: { store.selectPlayerFeed($0) })) {
+                    ForEach(feeds) { feed in Text(feedLabel(feed, in: feeds)).tag(feed.id) }
+                }
+            } label: {
+                Label("Streams", systemImage: "antenna.radiowaves.left.and.right")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.glass)
+            .accessibilityValue(feedLabel(current, in: feeds))
+            .accessibilityIdentifier("player-stream-picker")
         }
     }
 
