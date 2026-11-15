@@ -3,7 +3,7 @@ import Observation
 import SwiftUI
 import os
 
-enum AppTab: String, CaseIterable, Codable, Hashable { case home = "Home", guide = "Guide", myStuff = "My Stuff", search = "Search" }
+enum AppTab: String, CaseIterable, Codable, Hashable { case home = "Home", guide = "Guide", myStuff = "My Stuff", watch = "Watch", search = "Search" }
 struct ChannelGroup: Codable, Identifiable, Hashable { var id = UUID(); var name: String; var channelIDs: [String] }
 struct AppNotice: Identifiable { let id = UUID(); var title: String; var message: String }
 
@@ -18,6 +18,13 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     /// The second game in two-up viewing; muted unless the user moves the sound to it.
     let secondPlayback = PlaybackController(secondary: true)
     private(set) var secondGameID: String?
+    /// Movies and shows (the Watch tab).
+    let vod = VODLibrary()
+    /// The movie or episode playing, with its live position.
+    private(set) var nowPlayingVOD: WatchProgress?
+    /// The episode after the one playing, when known.
+    var vodUpNext: VODUpNext?
+    @ObservationIgnored private var vodPersisted = Date.distantPast
     let openAI = OpenAIService()
     let sportsData = SportsDataStore()
     private(set) var gameLinks: [String: [SportsFeedLink]] = [:]
@@ -31,7 +38,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     let cache = CatalogCache()
     private(set) var launchTimeline = LaunchTimeline()
     @ObservationIgnored private let launchSignposter = OSSignposter(subsystem: "app.iska.mysportly", category: "Launch")
-    private let provider = ProviderClient()
+    let provider = ProviderClient()
     private(set) var catalog = CatalogSnapshot()
     private(set) var channels: [Channel] = []
     private(set) var channelIndex: [String: Channel] = [:]
@@ -108,6 +115,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         launchTimeline.mark(.storeCreated, at: created)
         playback.quality = StreamQuality(rawValue: personal.value("preferences.streamQuality", default: "Auto")) ?? .automatic
         playback.onFailure = { [weak self] in self?.offerAlternate() }
+        playback.onProgress = { [weak self] position, duration, final in self?.vodProgressed(position, duration, final: final) }
         sportsData.onUpdate = { [weak self] in self?.matchSportsGames() }
         if !inMemory && registerBackground {
             backgroundRefresh.register(store: self)
@@ -639,6 +647,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         if importingSource == source.id { cancelImport(); _ = await importTask?.value }
         if secondPlayback.channel?.sourceID == source.id { stopSecond() }
         if playback.channel?.sourceID == source.id { stopPlayback() }
+        await vod.forget(source.id, cache: cache)
         do {
             try personal.remove("source.\(source.id)")
             rebuild()
@@ -669,6 +678,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             }
             activeSportsGameID = gameID
             playback.play(chosen, url: url, title: now(on: chosen)?.title, preferredLanguage: personal.value("preferences.audioLanguage", default: languages.first ?? "en"), alternates: alternates)
+            nowPlayingVOD = nil; vodUpNext = nil
             if usesHistory { try personal.set("history.\(chosen.id)", Date.now) }
             if !showPlayer { playerSourceID = zoomSource }
             showPlayer = true
@@ -706,7 +716,47 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         playback.setMuted(second); secondPlayback.setMuted(!second)
     }
     func stopSecond() { secondPlayback.stop(); secondGameID = nil; playback.setMuted(false) }
-    func stopPlayback() { stopSecond(); playback.stop() }
+    func stopPlayback() { stopSecond(); playback.stop(); nowPlayingVOD = nil; vodUpNext = nil }
+
+    // MARK: Movies and episodes
+
+    /// Plays a movie or episode from `startAt` (nil: the beginning).
+    func playVOD(_ item: WatchProgress, startAt: Double?, upNext: VODUpNext? = nil) {
+        do {
+            guard demo || sources.contains(where: { $0.id == item.sourceID }) else { throw CatalogError.rejected }
+            let url = demo ? SampleVOD.streamURL
+                : try provider.vodURL(kind: item.kind, providerID: item.providerID, container: item.container,
+                                      secrets: KeychainStore.credentials(item.sourceID) ?? SourceSecrets())
+            if watchingTwo { stopSecond() }
+            let channel = Channel(id: item.itemID, sourceID: item.sourceID, name: item.title, logo: item.artwork)
+            playback.play(channel, url: url, title: item.title, preferredLanguage: personal.value("preferences.audioLanguage", default: languages.first ?? "en"),
+                          live: false, startAt: startAt)
+            var started = item
+            started.updated = .now; started.watched = false
+            if startAt == nil { started.position = 0 }
+            activeSportsGameID = nil
+            nowPlayingVOD = started; vodUpNext = upNext
+            persistVOD(started)
+            if !showPlayer { playerSourceID = nil }
+            showPlayer = true
+        } catch { inform("Playback unavailable", safeError(error)) }
+    }
+
+    private func vodProgressed(_ position: Double, _ duration: Double, final: Bool) {
+        guard var item = nowPlayingVOD, playback.channel?.id == item.itemID else { return }
+        item.position = position; item.duration = duration; item.updated = .now
+        if playback.reachedEnd { item.watched = true }
+        nowPlayingVOD = item
+        // Personal data syncs; write on pause, stop and end, else every five minutes.
+        if final || Date.now.timeIntervalSince(vodPersisted) >= 300 { persistVOD(item) }
+    }
+    func flushVODProgress() {
+        playback.reportProgress()
+    }
+    private func persistVOD(_ item: WatchProgress) {
+        vodPersisted = .now
+        try? personal.set(WatchProgress.key(item.itemID), item)
+    }
     /// Live games to add as the second stream, excluding what's already playing.
     var secondGameChoices: [HomeGame] {
         let content = homeContent
@@ -716,9 +766,9 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     }
 
     /// The player's title: the game, else the current program, else the channel.
-    var playerTitle: String { watchTitle(playback.channel, gameID: activeSportsGameID) }
+    var playerTitle: String { nowPlayingVOD?.title ?? watchTitle(playback.channel, gameID: activeSportsGameID) }
     /// "Channel · League" for games, else the channel name when the title is a program.
-    var playerSubtitle: String { watchSubtitle(playback.channel, gameID: activeSportsGameID) }
+    var playerSubtitle: String { nowPlayingVOD.map(\.subtitle) ?? watchSubtitle(playback.channel, gameID: activeSportsGameID) }
     var secondTitle: String { watchTitle(secondPlayback.channel, gameID: secondGameID) }
     var secondSubtitle: String { watchSubtitle(secondPlayback.channel, gameID: secondGameID) }
 

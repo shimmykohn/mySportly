@@ -83,10 +83,12 @@ struct PlayerScreen: View {
                             .buttonStyle(.glass)
                             .accessibilityIdentifier("close-player")
                         Spacer()
-                        Button(store.watchingTwo ? "Change Second" : "Watch Two", systemImage: "rectangle.split.1x2") { choosingSecond = true }
-                            .font(.subheadline.weight(.semibold))
-                            .buttonStyle(.glass)
-                            .accessibilityIdentifier("add-second-stream")
+                        if store.nowPlayingVOD == nil {
+                            Button(store.watchingTwo ? "Change Second" : "Watch Two", systemImage: "rectangle.split.1x2") { choosingSecond = true }
+                                .font(.subheadline.weight(.semibold))
+                                .buttonStyle(.glass)
+                                .accessibilityIdentifier("add-second-stream")
+                        }
                     }
                     .padding(.horizontal).padding(.bottom, 10)
                     video
@@ -189,7 +191,7 @@ private struct PlayerDetails: View {
                         .accessibilityValue(Text(verbatim: playback.channel?.id ?? ""))
                 }
                 Spacer()
-                if let channel = playback.channel {
+                if let channel = playback.channel, store.nowPlayingVOD == nil {
                     let favorite = store.flag(channel, "favorite")
                     Button(favorite ? "Remove Favorite" : "Favorite", systemImage: favorite ? "heart.fill" : "heart") { store.toggle(channel, "favorite") }
                         .labelStyle(.iconOnly).font(.title3).tint(favorite ? .pink : .secondary)
@@ -201,6 +203,14 @@ private struct PlayerDetails: View {
                 Text(store.playerSubtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 0)
                 StreamsMenu()
+            }
+            if let next = store.vodUpNext {
+                let button = Button { store.playUpNext() } label: {
+                    Label("Next: \(next.episode.code) · \(next.episode.title)", systemImage: "forward.end.fill").lineLimit(1)
+                }
+                .accessibilityIdentifier("player-next-episode")
+                // Stands out once the episode ends.
+                if playback.reachedEnd { button.buttonStyle(.glassProminent) } else { button.buttonStyle(.glass) }
             }
             if let error = playback.errorMessage {
                 HStack {

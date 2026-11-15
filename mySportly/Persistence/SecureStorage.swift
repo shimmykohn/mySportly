@@ -123,6 +123,22 @@ actor CatalogCache {
               let key = try? key(), let plain = try? AES.GCM.open(box, using: key) else { return nil }
         return try? JSONDecoder().decode(AIResults.self, from: plain)
     }
+    /// A source's movies and shows; sealed like the catalog, never synced.
+    func saveVOD(_ catalog: VODCatalog) throws {
+        try prepare()
+        let sealed = try AES.GCM.seal(CatalogCodec.encode(catalog), using: key())
+        guard let data = sealed.combined else { throw KeychainStore.SecureFailure.write }
+        try data.write(to: directory.appending(path: "vod.\(catalog.sourceID.uuidString).sealed"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+    func loadVOD(_ sourceID: UUID) -> VODCatalog? {
+        guard let data = try? Data(contentsOf: directory.appending(path: "vod.\(sourceID.uuidString).sealed")),
+              let box = try? AES.GCM.SealedBox(combined: data),
+              let key = try? key(), let plain = try? AES.GCM.open(box, using: key) else { return nil }
+        return try? CatalogCodec.decode(VODCatalog.self, from: plain)
+    }
+    func removeVOD(_ sourceID: UUID) {
+        try? FileManager.default.removeItem(at: directory.appending(path: "vod.\(sourceID.uuidString).sealed"))
+    }
     func savePlaylist(_ text: String, sourceID: UUID) throws {
         try prepare()
         let sealed = try AES.GCM.seal(Data(text.utf8), using: key())

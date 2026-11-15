@@ -18,6 +18,10 @@ public struct AIResults: Codable, Equatable, Sendable {
     public var names: [String: String] = [:]
     /// Raw names the model already saw (kept or rejected), so they aren't resent.
     public var namesAsked: Set<String> = []
+    /// Movie and show titles: raw → model-cleaned, and those already sent.
+    /// Optional so files saved before movies and shows still decode.
+    public var vodNames: [String: String]?
+    public var vodNamesAsked: Set<String>?
     /// When the last run finished (seconds since 1970). Nil before the first run.
     public var lastRun: Double?
     public init() {}
@@ -26,7 +30,8 @@ public struct AIResults: Codable, Equatable, Sendable {
     public var summary: AIActivitySummary {
         AIActivitySummary(gamesFound: detectedGames.count, listingsChecked: games.count,
                           feedsCombined: mergedPairs.count, pairsChecked: merges.count,
-                          namesTidied: names.filter { $0.key != $0.value }.count, namesChecked: namesAsked.count,
+                          namesTidied: names.filter { $0.key != $0.value }.count + (vodNames ?? [:]).count,
+                          namesChecked: namesAsked.count + (vodNamesAsked ?? []).count,
                           lastRun: lastRun.map(Date.init(timeIntervalSince1970:)))
     }
 
@@ -41,6 +46,14 @@ public struct AIResults: Codable, Equatable, Sendable {
         let raw = Set(channels.map(\.name))
         names = names.filter { raw.contains($0.key) }
         namesAsked = namesAsked.intersection(raw)
+    }
+
+    /// Keeps title answers only for movies and shows still offered. Skipped
+    /// while the catalog isn't loaded, so answers survive launches.
+    public mutating func pruneVOD(rawTitles: Set<String>) {
+        guard !rawTitles.isEmpty else { return }
+        vodNames = vodNames?.filter { rawTitles.contains($0.key) }
+        vodNamesAsked = vodNamesAsked?.intersection(rawTitles)
     }
 
     /// The display name: the model's answer, else local rules.

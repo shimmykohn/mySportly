@@ -1,0 +1,249 @@
+import SwiftUI
+
+/// The Watch tab: the provider's movies and shows, in poster shelves.
+struct WatchView: View {
+    enum Shelf: String, CaseIterable, Identifiable { case movies = "Movies", shows = "TV Shows"; var id: Self { self } }
+    @Environment(AppStore.self) private var store
+    @State private var shelf = Shelf.movies
+
+    var body: some View {
+        let library = store.vod
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 28) {
+                Picker("Show", selection: $shelf) {
+                    ForEach(Shelf.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .accessibilityIdentifier("watch-shelf")
+
+                let continuing = store.continueWatching.filter { shelf == .movies ? $0.kind == .movie : $0.kind == .episode }
+                if !continuing.isEmpty {
+                    HomeRow(title: "Continue Watching", identifier: "watch-continue") {
+                        ForEach(continuing) { ContinueCard(item: $0) }
+                    }
+                }
+                switch shelf {
+                case .movies:
+                    if !library.recentMovies.isEmpty {
+                        HomeRow(title: VODShelf.recentlyAdded, identifier: "watch-recent") {
+                            ForEach(library.recentMovies) { MovieLink(movie: $0) }
+                        }
+                    }
+                    ForEach(library.movieRows) { row in
+                        ShelfRow(title: row.title, identifier: "watch-row-\(row.id)") {
+                            ForEach(row.items.prefix(20)) { MovieLink(movie: $0) }
+                        } all: { VODGrid(title: row.title, movies: row.items) }
+                    }
+                case .shows:
+                    ForEach(library.seriesRows) { row in
+                        ShelfRow(title: row.title, identifier: "watch-row-\(row.id)") {
+                            ForEach(row.items.prefix(20)) { ShowLink(show: $0) }
+                        } all: { VODGrid(title: row.title, shows: row.items) }
+                    }
+                }
+                if let problem = library.refreshProblem {
+                    Label(problem, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .overlay { emptyState }
+        .navigationTitle("Watch")
+        .toolbar {
+            if library.refreshing { ToolbarItem(placement: .topBarTrailing) { ProgressView() } }
+        }
+        .refreshable { await store.loadVOD(force: true) }
+        .task { await store.loadVOD() }
+        .accessibilityIdentifier("watch-root")
+    }
+
+    @ViewBuilder private var emptyState: some View {
+        let library = store.vod
+        if !library.hasContent {
+            if !store.demo && !store.sources.contains(where: { $0.kind == .xtream }) {
+                ContentUnavailableView {
+                    Label("Movies and Shows", systemImage: "play.rectangle.on.rectangle")
+                } description: {
+                    Text("Connect an Xtream source to watch its movies and TV shows.")
+                } actions: {
+                    Button("Connect a Source") { store.showSetup = true }.buttonStyle(.borderedProminent)
+                }
+            } else {
+                switch library.state {
+                case .idle, .loading: ProgressView("Loading movies and shows…")
+                case .failed(let message):
+                    ContentUnavailableView {
+                        Label("Couldn’t Load", systemImage: "wifi.exclamationmark")
+                    } description: { Text(message) } actions: {
+                        Button("Try Again") { Task { await store.loadVOD(force: true) } }.buttonStyle(.bordered)
+                    }
+                case .ready:
+                    ContentUnavailableView("No Movies or Shows", systemImage: "film.stack",
+                                           description: Text("Your provider doesn’t offer movies or TV shows."))
+                }
+            }
+        }
+    }
+}
+
+/// A shelf whose title opens the whole category.
+private struct ShelfRow<Content: View, All: View>: View {
+    let title: String
+    let identifier: String
+    @ViewBuilder let content: Content
+    @ViewBuilder let all: All
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            NavigationLink { all } label: {
+                HStack(spacing: 4) {
+                    Text(title).font(.headline)
+                    Image(systemName: "chevron.forward").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal)
+            .accessibilityAddTraits(.isHeader)
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 12) { content }
+                    .scrollTargetLayout()
+                    .padding(.horizontal)
+            }
+            .scrollIndicators(.hidden)
+            .scrollTargetBehavior(.viewAligned)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Every title in a category.
+struct VODGrid: View {
+    let title: String
+    var movies: [Movie] = []
+    var shows: [Series] = []
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 12, alignment: .top)], spacing: 18) {
+                ForEach(movies) { MovieLink(movie: $0, width: nil) }
+                ForEach(shows) { ShowLink(show: $0, width: nil) }
+            }
+            .padding()
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct MovieLink: View {
+    @Environment(AppStore.self) private var store
+    let movie: Movie
+    var width: CGFloat? = 112
+    var body: some View {
+        NavigationLink { MovieDetailView(movie: movie) } label: {
+            PosterCard(title: movie.title, artwork: movie.poster, progress: store.watchProgress[movie.id], width: width)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("movie-\(movie.id)")
+    }
+}
+
+struct ShowLink: View {
+    let show: Series
+    var width: CGFloat? = 112
+    var body: some View {
+        NavigationLink { SeriesDetailView(show: show) } label: {
+            PosterCard(title: show.title, artwork: show.poster, progress: nil, width: width)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("show-\(show.id)")
+    }
+}
+
+/// A 2:3 poster with its title under it, and a progress bar once started.
+struct PosterCard: View {
+    let title: String
+    let artwork: URL?
+    let progress: WatchProgress?
+    var width: CGFloat?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Poster(url: artwork, title: title)
+                .overlay(alignment: .bottom) {
+                    if let progress, progress.resumePosition != nil {
+                        ProgressView(value: progress.fraction).tint(.white).padding(8)
+                    } else if progress?.isFinished == true {
+                        Image(systemName: "checkmark.circle.fill").symbolRenderingMode(.palette).foregroundStyle(.white, .tint)
+                            .padding(6).frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+            Text(title).font(.caption).lineLimit(1).foregroundStyle(.primary)
+        }
+        .frame(width: width)
+        .contentShape(.rect)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Artwork, or a quiet stand-in with the title when the provider has none.
+struct Poster: View {
+    let url: URL?
+    let title: String
+    var ratio: CGFloat = 2 / 3
+
+    var body: some View {
+        Rectangle().fill(.fill.tertiary)
+            .aspectRatio(ratio, contentMode: .fit)
+            .overlay {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image { image.resizable().scaledToFill() }
+                    else {
+                        VStack(spacing: 6) {
+                            Image(systemName: "film").font(.title2).foregroundStyle(.secondary)
+                            Text(title).font(.caption2.weight(.semibold)).multilineTextAlignment(.center).lineLimit(3).foregroundStyle(.secondary)
+                        }
+                        .padding(8)
+                    }
+                }
+            }
+            .clipShape(.rect(cornerRadius: 10))
+            .accessibilityHidden(true)
+    }
+}
+
+/// A started title: tap to pick up where it stopped.
+struct ContinueCard: View {
+    @Environment(AppStore.self) private var store
+    let item: WatchProgress
+
+    var body: some View {
+        Button { store.resume(item) } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Poster(url: item.artwork, title: item.title)
+                    .overlay(alignment: .bottom) { ProgressView(value: item.fraction).tint(.white).padding(8) }
+                Text(item.title).font(.caption).lineLimit(1)
+                if !item.subtitle.isEmpty { Text(item.subtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
+            }
+            .frame(width: 112)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button("Mark as Watched", systemImage: "checkmark.circle") { store.setWatched(item, true) }
+            Button("Remove from Continue Watching", systemImage: "minus.circle", role: .destructive) { store.clearProgress(item) }
+        }
+        .accessibilityLabel("Resume \(item.title)")
+        .accessibilityIdentifier("continue-\(item.itemID)")
+    }
+}
+
+extension Double {
+    /// "1 hr 52 min" / "48 min"
+    var watchDuration: String {
+        let units: Set<Duration.UnitsFormatStyle.Unit> = self >= 3600 ? [.hours, .minutes] : [.minutes]
+        return Duration.seconds(self).formatted(.units(allowed: units, width: .abbreviated))
+    }
+}

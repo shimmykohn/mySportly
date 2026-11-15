@@ -45,6 +45,14 @@ struct PlaybackAlternative {
     let secondary: Bool
     /// Whether this player's sound is off (two-up viewing plays one at a time).
     private(set) var muted = false
+    /// Live channels vs. movies and episodes, which seek, resume and end.
+    private(set) var isLive = true
+    private(set) var reachedEnd = false
+    /// Position and duration of a movie or episode, every 15 s and on pause, stop and end.
+    var onProgress: ((_ position: Double, _ duration: Double, _ final: Bool) -> Void)?
+    private var pendingStart: Double?
+    private var endObserver: NSObjectProtocol?
+    private var progressObserver: Any?
     func setMuted(_ on: Bool) { muted = on; player.isMuted = on }
 
     init(secondary: Bool = false) {
@@ -61,6 +69,9 @@ struct PlaybackAlternative {
                 self.updateNowPlaying()
             }
         }
+        progressObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 15, preferredTimescale: 1), queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reportProgress(final: false) }
+        }
         guard !secondary else { return }
         let commands = MPRemoteCommandCenter.shared()
         remoteTargets.append(commands.playCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.resume() }; return .success })
@@ -68,9 +79,11 @@ struct PlaybackAlternative {
         remoteTargets.append(commands.togglePlayPauseCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.toggle() }; return .success })
     }
 
-    func play(_ channel: Channel, url: URL, title: String?, preferredLanguage: String, alternates: [PlaybackAlternative] = []) {
+    func play(_ channel: Channel, url: URL, title: String?, preferredLanguage: String, alternates: [PlaybackAlternative] = [], live: Bool = true, startAt: Double? = nil) {
         if self.channel?.id != channel.id { previous = self.channel }
+        reportProgress()
         cancelPending()
+        isLive = live; pendingStart = startAt; reachedEnd = false
         self.channel = channel; currentURL = url; self.title = title; self.preferredLanguage = preferredLanguage
         alternatives = Array(alternates.filter { $0.channel.id != channel.id }.prefix(2))
         videoUnavailable = false; playbackNotice = nil
@@ -112,6 +125,10 @@ struct PlaybackAlternative {
                 guard let self, self.sessionID == token, self.player.currentItem === item else { return }
                 if item.status == .failed { self.recover() }
                 if item.status == .readyToPlay {
+                    if let start = self.pendingStart {
+                        await self.player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+                        self.pendingStart = nil
+                    }
                     self.startAvailableMedia()
                     self.watchForVideo(on: item, token: token)
                     await self.selectAudio(on: item, token: token)
@@ -122,6 +139,12 @@ struct PlaybackAlternative {
             Task { @MainActor [weak self] in
                 guard let self, self.sessionID == token, self.player.currentItem === item else { return }
                 self.startAvailableMedia()
+            }
+        }
+        endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.sessionID == token, self.player.currentItem === item, !self.isLive else { return }
+                self.reachedEnd = true; self.reportProgress()
             }
         }
         failedObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in Task { @MainActor [weak self] in if self?.sessionID == token, self?.player.currentItem === item { self?.recover() } } }
@@ -137,7 +160,7 @@ struct PlaybackAlternative {
         item.preferredMaximumResolution = preference.resolution
     }
     private func startAvailableMedia() {
-        guard wantsPlayback, audioReady, !startedImmediately, let item = player.currentItem,
+        guard wantsPlayback, audioReady, !startedImmediately, pendingStart == nil, let item = player.currentItem,
               item.status == .readyToPlay, !item.isPlaybackBufferEmpty,
               item.loadedTimeRanges.contains(where: { $0.timeRangeValue.duration.seconds > 0 }) else { return }
         startedImmediately = true
@@ -204,6 +227,8 @@ struct PlaybackAlternative {
             errorMessage = failure.message; onFailure?(); return
         }
         isLoading = true
+        // Movies and episodes reconnect where they were.
+        if !isLive, pendingStart == nil, player.currentTime().seconds.isFinite, player.currentTime().seconds > 0 { pendingStart = player.currentTime().seconds }
         attempts += 1; let token = sessionID; let delay = attempts * 2
         retryTask = Task {
             do { try await Task.sleep(for: .seconds(delay)) } catch { return }
@@ -214,6 +239,7 @@ struct PlaybackAlternative {
     func retry() { cancelPending(); attempts = 0; errorMessage = nil; videoUnavailable = false; playbackNotice = nil; wantsPlayback = true; preparePlayback() }
     func toggle() { isPlaying ? pause() : resume() }
     func pause() {
+        reportProgress()
         wantsPlayback = false
         retryTask?.cancel(); retryTask = nil; stallTask?.cancel(); stallTask = nil
         videoTask?.cancel(); videoTask = nil
@@ -228,9 +254,10 @@ struct PlaybackAlternative {
         updateNowPlaying()
     }
     func stop() {
+        reportProgress()
         cancelPending(); clearItemObservers(); player.replaceCurrentItem(with: nil)
         channel = nil; currentURL = nil; isPlaying = false; isLoading = false; hasVideoFrame = false; wantsPlayback = false; audioReady = false; errorMessage = nil
-        alternatives = []; playbackNotice = nil; videoUnavailable = false
+        alternatives = []; playbackNotice = nil; videoUnavailable = false; isLive = true; pendingStart = nil; reachedEnd = false
         if !secondary { MPNowPlayingInfoCenter.default().nowPlayingInfo = nil }
     }
     private func cancelPending() { sessionID = UUID(); retryTask?.cancel(); retryTask = nil; preparationTask?.cancel(); preparationTask = nil; stallTask?.cancel(); stallTask = nil; videoTask?.cancel(); videoTask = nil }
@@ -240,13 +267,26 @@ struct PlaybackAlternative {
         bufferObservation = nil
         if let failedObserver { NotificationCenter.default.removeObserver(failedObserver) }
         if let stalledObserver { NotificationCenter.default.removeObserver(stalledObserver) }
-        failedObserver = nil; stalledObserver = nil
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        failedObserver = nil; stalledObserver = nil; endObserver = nil
     }
     private func updateNowPlaying() {
         guard !secondary, let channel else { return }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = [MPMediaItemPropertyTitle: title ?? channel.name,
-            MPMediaItemPropertyArtist: channel.name, MPNowPlayingInfoPropertyIsLiveStream: true,
+        var info: [String: Any] = [MPMediaItemPropertyTitle: title ?? channel.name,
+            MPMediaItemPropertyArtist: channel.name, MPNowPlayingInfoPropertyIsLiveStream: isLive,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0]
+        if !isLive, let item = player.currentItem, item.duration.seconds.isFinite {
+            info[MPMediaItemPropertyPlaybackDuration] = item.duration.seconds
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player.currentTime().seconds
+        }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+    /// Reports where a movie or episode is, for resume.
+    func reportProgress(final: Bool = true) {
+        guard !isLive, channel != nil, pendingStart == nil, let item = player.currentItem, item.status == .readyToPlay else { return }
+        let duration = item.duration.seconds, position = reachedEnd ? duration : player.currentTime().seconds
+        guard duration.isFinite, duration > 0, position.isFinite else { return }
+        onProgress?(position, duration, final)
     }
 }
 

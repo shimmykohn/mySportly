@@ -44,4 +44,16 @@ struct AIResultsTests {
         let old = #"{"version":1,"merges":{},"games":{},"names":{},"namesAsked":[]}"#
         #expect(try JSONDecoder().decode(AIResults.self, from: Data(old.utf8)).lastRun == nil)
     }
+
+    @Test func titleAnswersSurviveUntilTheCatalogIsLoaded() {
+        var results = AIResults()
+        results.vodNames = ["EN | HEAT (1995)": "Heat", "Gone": "Gone"]
+        results.vodNamesAsked = ["EN | HEAT (1995)", "Gone"]
+        results.pruneVOD(rawTitles: [])
+        #expect(results.vodNames?.count == 2, "Not loaded yet: keep everything")
+        results.pruneVOD(rawTitles: ["EN | HEAT (1995)"])
+        #expect(results.vodNames == ["EN | HEAT (1995)": "Heat"])
+        #expect(results.vodNamesAsked == ["EN | HEAT (1995)"])
+        #expect(results.summary.namesTidied == 1)
+    }
 }

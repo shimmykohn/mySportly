@@ -24,6 +24,10 @@ struct BrowseTiles: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            Button { store.selectedTab = .watch } label: {
+                Tile(title: "Movies & TV") { Image(systemName: "play.rectangle.on.rectangle.fill").foregroundStyle(.indigo) }
+            }
+            .accessibilityIdentifier("browse-watch")
             ForEach(Self.categories, id: \.0) { title, symbol, tint in
                 Button { destination = .category(title) } label: { Tile(title: title) { Image(systemName: symbol).foregroundStyle(tint) } }
                     .accessibilityIdentifier("browse-\(title)")

@@ -9,6 +9,7 @@ struct ContentView: View {
             Tab("Home", systemImage: "house", value: AppTab.home) { NavigationStack { HomeView().toolbarTitleDisplayMode(.inline) } }
             Tab("Guide", systemImage: "list.bullet.rectangle", value: AppTab.guide) { NavigationStack { GuideView().toolbarTitleDisplayMode(.inline) } }
             Tab("My Stuff", systemImage: "square.stack", value: AppTab.myStuff) { NavigationStack { MyStuffView().toolbarTitleDisplayMode(.inline) } }
+            Tab("Watch", systemImage: "play.rectangle.on.rectangle", value: AppTab.watch) { NavigationStack { WatchView().toolbarTitleDisplayMode(.inline) } }
             Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) { NavigationStack { SearchScreen().toolbarTitleDisplayMode(.inline) } }
         }
         .tabViewStyle(.sidebarAdaptable)

@@ -11,6 +11,7 @@ extension AppStore {
         guard aiJobsTask == nil, catalogReady, !demo, let key = openAI.activeKey(), let query = queryIndex else { return }
         let channels = channels, reference = sportsData.reference, date = clock, start = aiResults
         let catalogCache = self.cache
+        let vodTitles = Set(vod.movies.map(\.rawTitle) + vod.series.map(\.rawTitle))
         aiJobsTask = Task { [weak self] in
             var results = start
             self?.aiActivity = "Starting…"
@@ -53,7 +54,20 @@ extension AppStore {
                     results.names.merge(try await names.clean(batch)) { _, new in new }
                     results.namesAsked.formUnion(batch)
                 }
+                // Movie and show titles, once the Watch catalog is loaded.
+                let titlesAnswered = Set((results.vodNames ?? [:]).keys).union(results.vodNamesAsked ?? [])
+                let titleLeftovers = try await catalogWork {
+                    vodTitles.subtracting(titlesAnswered).filter { NameCleaning.needsModel(VODTitle.clean($0).title) }.sorted()
+                }
+                let titleBatches = Array(titleLeftovers.prefix(Self.aiLimits.names)).chunked(NameCleanupClient.batchSize)
+                for (index, batch) in titleBatches.enumerated() {
+                    step("Tidying movie and show titles", index, of: titleBatches.count)
+                    let cleaned = try await names.clean(batch).mapValues { VODTitle.clean($0).title }
+                    results.vodNames = (results.vodNames ?? [:]).merging(cleaned) { _, new in new }
+                    results.vodNamesAsked = (results.vodNamesAsked ?? []).union(batch)
+                }
                 results.prune(at: .now, channels: channels, candidates: candidates)
+                results.pruneVOD(rawTitles: vodTitles)
                 results.lastRun = Date.now.timeIntervalSince1970
                 await self?.applyAIResults(results, cache: catalogCache)
                 self?.openAI.succeeded()
@@ -72,6 +86,7 @@ extension AppStore {
         aiResults = results
         try? await cache.saveAIResults(results)
         if results.names != previous.names { resetDisplayNames() }
+        if results.vodNames != previous.vodNames { await vod.retitle(results.vodNames ?? [:]) }
         if results.mergedPairs != previous.mergedPairs { rebuild(force: true) }
         else if results.detectedGames != previous.detectedGames { matchSportsGames() }
     }

@@ -19,6 +19,7 @@ import Combine
                 .onOpenURL { AppRouteInbox.queue($0); AppRouteInbox.consume(using: store) }
                 .onChange(of: phase) { _, phase in
                     if phase == .background {
+                        store.flushVODProgress()
                         store.scheduleSourceRefresh()
                     }
                     if phase == .active {

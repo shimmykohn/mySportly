@@ -9,6 +9,9 @@ struct SearchScreen: View {
     @State private var limit = 50
     @State private var searchTask: Task<Void, Never>?
     @State private var destination: BrowseDestination?
+    @State private var movies: [Movie] = []
+    @State private var shows: [Series] = []
+    @State private var vodTask: Task<Void, Never>?
 
     private var text: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -35,7 +38,7 @@ struct SearchScreen: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
-            } else if groups.isEmpty && searched == text {
+            } else if groups.isEmpty && searched == text && movies.isEmpty && shows.isEmpty {
                 ContentUnavailableView.search(text: text).accessibilityIdentifier("search-empty")
             } else {
                 if !groups.teams.isEmpty {
@@ -57,6 +60,26 @@ struct SearchScreen: View {
                     }
                     .accessibilityIdentifier("search-channels")
                 }
+                if !movies.isEmpty {
+                    Section("Movies") {
+                        ForEach(movies) { movie in
+                            NavigationLink { MovieDetailView(movie: movie) } label: {
+                                VODResultRow(title: movie.title, detail: movie.year.map(String.init) ?? "Movie", artwork: movie.poster)
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("search-movies")
+                }
+                if !shows.isEmpty {
+                    Section("TV Shows") {
+                        ForEach(shows) { show in
+                            NavigationLink { SeriesDetailView(show: show) } label: {
+                                VODResultRow(title: show.title, detail: show.year.map(String.init) ?? "TV Show", artwork: show.poster)
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("search-shows")
+                }
             }
         }
         .navigationTitle("Search")
@@ -73,7 +96,7 @@ struct SearchScreen: View {
         .onChange(of: store.sportsLinkRevision) { _, _ in if !text.isEmpty { search() } }
         .onAppear { receiveRoute() }
         .onChange(of: store.searchRequest) { _, _ in receiveRoute() }
-        .onDisappear { searchTask?.cancel() }
+        .onDisappear { searchTask?.cancel(); vodTask?.cancel() }
     }
 
     private func receiveRoute() {
@@ -87,6 +110,7 @@ struct SearchScreen: View {
         searchTask?.cancel()
         let request = text
         limit = 50
+        searchVOD(request)
         guard !request.isEmpty else { groups = SearchGroups(); searched = ""; return }
         let ignored: Set<String> = ["find", "watch", "show", "me", "the", "a", "now", "tonight", "please", "on", "channel", "channels"]
         let keywords = request.lowercased().split(separator: " ").map(String.init).filter { !ignored.contains($0) }
@@ -130,6 +154,21 @@ struct SearchScreen: View {
 }
 
 extension SearchScreen {
+    /// Movies and shows by title; loads the saved catalog on the first search.
+    private func searchVOD(_ request: String) {
+        vodTask?.cancel()
+        guard request.count >= 2 else { movies = []; shows = []; return }
+        vodTask = Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            await store.loadVOD()
+            let allMovies = store.vod.movies, allShows = store.vod.series
+            let found = await Task.detached { (VODShelf.search(request, in: allMovies, limit: 20), VODShelf.search(request, in: allShows, limit: 20)) }.value
+            guard !Task.isCancelled else { return }
+            (movies, shows) = found
+        }
+    }
+
     static func window(_ time: String, now: Date) -> (start: Date, end: Date) {
         let calendar = Calendar.current
         switch time {
@@ -160,6 +199,21 @@ private struct SearchResultRow: View {
             }
         } else {
             PlayableChannelRow(channel: match.channel)
+        }
+    }
+}
+
+private struct VODResultRow: View {
+    let title: String
+    let detail: String
+    let artwork: URL?
+    var body: some View {
+        HStack(spacing: 12) {
+            Poster(url: artwork, title: "").frame(width: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline).lineLimit(1)
+                Text(detail).font(.subheadline).foregroundStyle(.secondary)
+            }
         }
     }
 }
