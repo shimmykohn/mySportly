@@ -4,6 +4,7 @@ import Foundation
 /// nests HTTP failures inside NSURLErrorDomain rather than returning a response.
 public struct PlaybackFailure: Equatable, Sendable {
     public let httpStatus: Int?
+    public init(httpStatus: Int?) { self.httpStatus = httpStatus }
     public init(error: Error?) {
         var current = error as NSError?
         var status: Int?

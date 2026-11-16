@@ -15,6 +15,7 @@ struct SettingsView: View {
                 Text(store.personal.cloudStatus).foregroundStyle(.secondary)
             }
             Section { NavigationLink { OpenAIKeyView() } label: { Label("OpenAI", systemImage: "sparkles") }.accessibilityIdentifier("openai-settings") }
+            Section { NavigationLink { AcknowledgementsView() } label: { Label("Acknowledgements", systemImage: "doc.text") } }
         }
         .navigationTitle("Settings")
     }

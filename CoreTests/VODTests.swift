@@ -131,10 +131,10 @@ struct VODShelfTests {
 }
 
 struct VODFormatTests {
-    @Test func unsupportedContainersAskForHLS() {
+    @Test func containersAreRequestedAsTheyAre() {
         #expect(VODFormat.requested("MP4") == "mp4")
-        #expect(VODFormat.requested("mkv") == "m3u8")
-        #expect(VODFormat.requested("avi") == "m3u8")
+        #expect(VODFormat.requested("MKV") == "mkv")
+        #expect(VODFormat.requested("avi") == "avi")
         #expect(!VODFormat.isNative("webm"))
     }
 }

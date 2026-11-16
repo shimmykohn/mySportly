@@ -870,12 +870,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         } catch { inform("Variants weren’t separated", error.localizedDescription) }
     }
     private func offerAlternate() {
-        if let item = nowPlayingVOD {
-            if !VODFormat.isNative(item.container) {
-                playback.errorMessage = "This title is a \(item.container.uppercased()) file, which iPhone can’t play, and your provider didn’t offer a version it can."
-            }
-            return
-        }
+        if nowPlayingVOD != nil { return }
         guard let channel = playback.channel else { return }
         let available = variants(of: channel).filter { $0.id != channel.id }
         if !available.isEmpty {

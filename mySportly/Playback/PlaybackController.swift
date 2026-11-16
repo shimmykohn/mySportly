@@ -1,5 +1,7 @@
 import Foundation
+import AetherEngine
 import AVKit
+import Combine
 import MediaPlayer
 import Observation
 import SwiftUI
@@ -10,7 +12,10 @@ struct PlaybackAlternative {
 }
 
 @MainActor @Observable final class PlaybackController {
-    private(set) var player = AVPlayer()
+    /// What the video views show: the app's own player, or the engine's
+    /// while it plays a file the system player can't open.
+    private(set) var player: AVPlayer
+    private let systemPlayer = AVPlayer()
     private(set) var channel: Channel?
     private(set) var previous: Channel?
     private(set) var currentURL: URL?
@@ -54,18 +59,36 @@ struct PlaybackAlternative {
     private var endObserver: NSObjectProtocol?
     private var progressObserver: Any?
     private var startTimeout: Task<Void, Never>?
+    /// Plays MKV and other files the system player can't open: it reads the
+    /// file itself and serves it to its own AVPlayer as local HLS. Made on
+    /// first use, then kept, as its documentation asks.
+    private var engine: AetherEngine?
+    private var engineSinks: Set<AnyCancellable> = []
+    /// The engine keeps a paused title alive in the background only while it's in Picture in Picture.
+    var inPictureInPicture = false { didSet { engine?.pictureInPictureActive = inPictureInPicture } }
+    private var usesEngine: Bool { !isLive && currentURL.map { !VODFormat.isNative($0.pathExtension) } == true }
     func setMuted(_ on: Bool) { muted = on; player.isMuted = on }
 
     init(secondary: Bool = false) {
         self.secondary = secondary
-        timeObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
+        player = systemPlayer
+        observe(systemPlayer)
+        guard !secondary else { return }
+        let commands = MPRemoteCommandCenter.shared()
+        remoteTargets.append(commands.playCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.resume() }; return .success })
+        remoteTargets.append(commands.pauseCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.pause() }; return .success })
+        remoteTargets.append(commands.togglePlayPauseCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.toggle() }; return .success })
+    }
+    private func observe(_ player: AVPlayer) {
+        // The engine's player can already be playing by the time it's shown.
+        timeObservation = player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, self.player === player else { return }
                 self.isPlaying = player.timeControlStatus == .playing
                 if player.timeControlStatus == .paused, self.audioReady, self.preparationTask == nil, player.currentItem?.status == .readyToPlay {
                     self.wantsPlayback = false
                 }
-                self.isLoading = self.wantsPlayback && (!self.audioReady || player.timeControlStatus == .waitingToPlayAtSpecifiedRate)
+                self.isLoading = self.wantsPlayback && (!self.audioReady || self.preparationTask != nil || player.timeControlStatus == .waitingToPlayAtSpecifiedRate)
                 if self.isPlaying { self.stallTask?.cancel(); self.stallTask = nil; self.startTimeout?.cancel(); self.startTimeout = nil }
                 self.updateNowPlaying()
             }
@@ -73,20 +96,22 @@ struct PlaybackAlternative {
         progressObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 15, preferredTimescale: 1), queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.reportProgress(final: false) }
         }
-        guard !secondary else { return }
-        let commands = MPRemoteCommandCenter.shared()
-        remoteTargets.append(commands.playCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.resume() }; return .success })
-        remoteTargets.append(commands.pauseCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.pause() }; return .success })
-        remoteTargets.append(commands.togglePlayPauseCommand.addTarget { [weak self] _ in Task { @MainActor [weak self] in self?.toggle() }; return .success })
+    }
+    /// Moves the views and the observers to another player.
+    private func show(_ next: AVPlayer) {
+        guard next !== player else { return }
+        if let progressObserver { player.removeTimeObserver(progressObserver) }
+        player = next; next.isMuted = muted
+        observe(next)
     }
 
     func play(_ channel: Channel, url: URL, title: String?, preferredLanguage: String, alternates: [PlaybackAlternative] = [], live: Bool = true, startAt: Double? = nil) {
         if self.channel?.id != channel.id { previous = self.channel }
         reportProgress()
-        cancelPending()
+        cancelPending(); stopEngine()
         isLive = live; pendingStart = startAt; reachedEnd = false
-        if !live { watchStart() }
         self.channel = channel; currentURL = url; self.title = title; self.preferredLanguage = preferredLanguage
+        if !live { watchStart() }
         alternatives = Array(alternates.filter { $0.channel.id != channel.id }.prefix(2))
         videoUnavailable = false; playbackNotice = nil
         attempts = 0; errorMessage = nil
@@ -98,6 +123,7 @@ struct PlaybackAlternative {
     private func preparePlayback() {
         let token = sessionID
         isLoading = true; audioReady = false; hasVideoFrame = false
+        if usesEngine { loadEngine(token: token); return }
         // Loading the asset and setting up audio are independent. Start the
         // single player item now so network startup overlaps audio activation.
         replaceItem()
@@ -114,6 +140,91 @@ struct PlaybackAlternative {
                 errorMessage = "Audio output could not be activated. Try again after other audio activity finishes."
             }
         }
+    }
+    private func loadEngine(token: UUID) {
+        guard let url = currentURL else { return }
+        preparationTask = Task {
+            do {
+                try await PlaybackAudioSession.shared.activate()
+                guard !Task.isCancelled, sessionID == token else { return }
+                audioReady = true
+            } catch {
+                guard !Task.isCancelled, sessionID == token else { return }
+                preparationTask = nil; isLoading = false
+                errorMessage = "Audio output could not be activated. Try again after other audio activity finishes."
+                return
+            }
+            do {
+                let engine = try engine ?? makeEngine()
+                var options = LoadOptions()
+                // Providers commonly allow one connection per account.
+                options.maxConcurrentSourceRequests = 1
+                options.preferredAudioLanguages = [preferredLanguage]
+                // The system player's own audio and subtitle menus, in Picture in Picture and AirPlay too.
+                options.nativeAudioTrackMenu = true; options.prepareNativeSubtitles = true
+                // Its software decoder draws into a view of its own, which this player doesn't show.
+                options.escalatesToSoftwarePath = false
+                options.generatesBackgroundScrubPreviews = false
+                try await engine.load(url: url, startPosition: pendingStart, options: options)
+                guard sessionID == token else { return }
+                preparationTask = nil; pendingStart = nil
+                if let player = engine.currentAVPlayer { show(player) }
+                isLoading = wantsPlayback && player.timeControlStatus != .playing
+                if !wantsPlayback { engine.pause() }
+            } catch is CancellationError {
+                // A newer title, a retry or a stop replaced this load.
+            } catch {
+                guard sessionID == token else { return }
+                preparationTask = nil
+                engineFailed(engine?.errorInfo)
+            }
+        }
+    }
+    private func makeEngine() throws -> AetherEngine {
+        let engine = try AetherEngine()
+        // Publishers fire while the engine is changing; act once it has.
+        engine.$currentAVPlayer.sink { [weak self] player in
+            Task { @MainActor [weak self] in
+                guard let self, self.usesEngine, let player, self.errorMessage == nil else { return }
+                self.show(player)
+            }
+        }.store(in: &engineSinks)
+        engine.$state.sink { [weak self, weak engine] state in
+            // The engine sets the failure's details just before the state, and clears them after it.
+            let token = self?.sessionID, info = engine?.errorInfo
+            Task { @MainActor [weak self] in
+                guard let self, self.usesEngine, self.sessionID == token else { return }
+                if state == .ended { self.reachedEnd = true; self.reportProgress() }
+                if case .error = state { self.engineFailed(info) }
+            }
+        }.store(in: &engineSinks)
+        engine.$videoRoute.sink { [weak self] route in
+            let token = self?.sessionID
+            Task { @MainActor [weak self] in
+                guard let self, self.usesEngine, self.sessionID == token, route == .software else { return }
+                self.fail("This title’s video is in a format iPhone can’t decode in this app.")
+            }
+        }.store(in: &engineSinks)
+        engine.pictureInPictureActive = inPictureInPicture
+        self.engine = engine
+        return engine
+    }
+    /// A failed load reports twice, as a thrown error and as a state; the first one wins.
+    private func engineFailed(_ info: PlaybackErrorInfo?) {
+        guard usesEngine, errorMessage == nil else { return }
+        let message = switch info?.kind {
+        case .sourceRefused?, .sourceRateLimited?: PlaybackFailure(httpStatus: info?.underlyingCode).message
+        case .sourceOpenFailed?, .vodSourceFailed?, .reloadFailed?, .sourceFabricatesRanges?, .sourceCertificateRejected?:
+            "This title couldn’t be read from your provider. It may not be sending it right now; try again later."
+        case .storageExhausted?: "There isn’t enough free space on this iPhone to play this title."
+        default: "This title’s video or audio is in a format iPhone can’t play in this app."
+        }
+        fail(message)
+    }
+    /// Ends the engine's session, and with it the connection to the provider.
+    private func stopEngine() {
+        engine?.stop()
+        show(systemPlayer)
     }
     private func replaceItem() {
         guard let url = currentURL else { return }
@@ -224,8 +335,10 @@ struct PlaybackAlternative {
     /// instead of showing "Connecting…" indefinitely.
     private func watchStart() {
         let token = sessionID
+        // Reading a file's index over the network takes the engine longer.
+        let limit = usesEngine ? 90 : 30
         startTimeout = Task {
-            do { try await Task.sleep(for: .seconds(30)) } catch { return }
+            do { try await Task.sleep(for: .seconds(limit)) } catch { return }
             guard sessionID == token, wantsPlayback, !isLive, !isPlaying else { return }
             fail("This title didn’t start. Your provider may not be sending it right now; try again later or choose another title.")
         }
@@ -233,6 +346,13 @@ struct PlaybackAlternative {
     private func fail(_ message: String) {
         wantsPlayback = false; isLoading = false; isPlaying = false
         retryTask?.cancel(); retryTask = nil
+        if usesEngine {
+            reportProgress()
+            // Try Again picks up where it stopped.
+            if pendingStart == nil, let position = engine?.currentTime, position > 0 { pendingStart = position }
+            preparationTask?.cancel(); preparationTask = nil
+            stopEngine()
+        }
         player.pause()
         errorMessage = message; onFailure?()
     }
@@ -276,11 +396,18 @@ struct PlaybackAlternative {
         wantsPlayback = false
         retryTask?.cancel(); retryTask = nil; stallTask?.cancel(); stallTask = nil
         videoTask?.cancel(); videoTask = nil
-        player.pause(); isPlaying = false; isLoading = false; updateNowPlaying()
+        if usesEngine { engine?.pause() } else { player.pause() }
+        isPlaying = false; isLoading = false; updateNowPlaying()
     }
     func resume() {
         guard currentURL != nil else { return }
         wantsPlayback = true
+        if usesEngine {
+            // A failed or finished session can't be revived; it is loaded again.
+            if errorMessage != nil || reachedEnd || engine?.state == .idle { reachedEnd = false; if preparationTask == nil { retry() } }
+            else { engine?.play() }
+            updateNowPlaying(); return
+        }
         if player.currentItem?.status == .failed { retry(); return }
         if audioReady { player.play(); startAvailableMedia(); if let item = player.currentItem { watchForVideo(on: item, token: sessionID) } }
         else if preparationTask == nil { preparePlayback() }
@@ -288,7 +415,7 @@ struct PlaybackAlternative {
     }
     func stop() {
         reportProgress()
-        cancelPending(); clearItemObservers(); player.replaceCurrentItem(with: nil)
+        cancelPending(); clearItemObservers(); stopEngine(); player.replaceCurrentItem(with: nil)
         channel = nil; currentURL = nil; isPlaying = false; isLoading = false; hasVideoFrame = false; wantsPlayback = false; audioReady = false; errorMessage = nil
         alternatives = []; playbackNotice = nil; videoUnavailable = false; isLive = true; pendingStart = nil; reachedEnd = false
         if !secondary { MPNowPlayingInfoCenter.default().nowPlayingInfo = nil }
@@ -308,7 +435,10 @@ struct PlaybackAlternative {
         var info: [String: Any] = [MPMediaItemPropertyTitle: title ?? channel.name,
             MPMediaItemPropertyArtist: channel.name, MPNowPlayingInfoPropertyIsLiveStream: isLive,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0]
-        if !isLive, let item = player.currentItem, item.duration.seconds.isFinite {
+        if usesEngine, let engine, engine.duration > 0 {
+            info[MPMediaItemPropertyPlaybackDuration] = engine.duration
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = engine.currentTime
+        } else if !isLive, let item = player.currentItem, item.duration.seconds.isFinite {
             info[MPMediaItemPropertyPlaybackDuration] = item.duration.seconds
             info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player.currentTime().seconds
         }
@@ -316,6 +446,12 @@ struct PlaybackAlternative {
     }
     /// Reports where a movie or episode is, for resume.
     func reportProgress(final: Bool = true) {
+        if usesEngine {
+            // The engine's clock is the file's own timeline, whatever its player is showing.
+            guard channel != nil, pendingStart == nil, let engine, engine.duration > 0 else { return }
+            onProgress?(reachedEnd ? engine.duration : engine.currentTime, engine.duration, final)
+            return
+        }
         guard !isLive, channel != nil, pendingStart == nil, let item = player.currentItem, item.status == .readyToPlay else { return }
         let duration = item.duration.seconds, position = reachedEnd ? duration : player.currentTime().seconds
         guard duration.isFinite, duration > 0, position.isFinite else { return }
@@ -342,6 +478,7 @@ struct NativePlayerView: UIViewControllerRepresentable {
     var controls = true
     var pictureInPicture = true
     var onDisplayChange: ((Bool, AVPlayerItem?) -> Void)?
+    var onPictureInPicture: ((Bool) -> Void)?
     /// Taps on the video, alongside the player's own show/hide controls.
     var onTap: (() -> Void)?
     /// Shown over the system full-screen player, which has no public slot for
@@ -354,6 +491,7 @@ struct NativePlayerView: UIViewControllerRepresentable {
         controller.allowsPictureInPicturePlayback = pictureInPicture
         controller.canStartPictureInPictureAutomaticallyFromInline = pictureInPicture
         context.coordinator.onDisplayChange = onDisplayChange
+        context.coordinator.onPictureInPicture = onPictureInPicture
         context.coordinator.onTap = onTap
         context.coordinator.accessory = fullScreenAccessory
         controller.delegate = context.coordinator
@@ -372,16 +510,18 @@ struct NativePlayerView: UIViewControllerRepresentable {
         if controller.player !== player { controller.player = player }
         controller.showsPlaybackControls = controls
         context.coordinator.onDisplayChange = onDisplayChange
+        context.coordinator.onPictureInPicture = onPictureInPicture
         context.coordinator.onTap = onTap
         context.coordinator.accessory = fullScreenAccessory
     }
     static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) {
-        coordinator.observation = nil; coordinator.onDisplayChange = nil; coordinator.onTap = nil
+        coordinator.observation = nil; coordinator.onDisplayChange = nil; coordinator.onPictureInPicture = nil; coordinator.onTap = nil
         coordinator.detach(); controller.delegate = nil; controller.player = nil
     }
     @MainActor final class Coordinator: NSObject, UIGestureRecognizerDelegate, AVPlayerViewControllerDelegate {
         var observation: NSKeyValueObservation?
         var onDisplayChange: ((Bool, AVPlayerItem?) -> Void)?
+        var onPictureInPicture: ((Bool) -> Void)?
         var onTap: (() -> Void)?
         var accessory: AnyView?
         private var host: UIHostingController<AnyView>?
@@ -389,6 +529,9 @@ struct NativePlayerView: UIViewControllerRepresentable {
         private var placement: [NSLayoutConstraint] = []
 
         @objc func tapped() { onTap?() }
+        func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) { onPictureInPicture?(true) }
+        func playerViewControllerDidStopPictureInPicture(_ playerViewController: AVPlayerViewController) { onPictureInPicture?(false) }
+        func playerViewController(_ playerViewController: AVPlayerViewController, failedToStartPictureInPictureWithError error: Error) { onPictureInPicture?(false) }
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
 
         func playerViewController(_ playerViewController: AVPlayerViewController, willBeginFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator) {

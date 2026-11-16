@@ -439,10 +439,11 @@ public enum VODShelf {
 
 public enum VODFormat {
     /// Containers the system player opens. MKV, WebM, AVI and FLV aren't
-    /// among them, though they're common in provider libraries.
+    /// among them, though they're common in provider libraries; those play
+    /// through the app's own demuxer instead.
     public static let native: Set<String> = ["mp4", "m4v", "mov", "m3u8"]
     public static func isNative(_ container: String) -> Bool { native.contains(container.lowercased()) }
-    /// What to ask the provider for: the file itself when the system player
-    /// can open it, else the provider's HLS version, which many panels offer.
-    public static func requested(_ container: String) -> String { isNative(container) ? container.lowercased() : "m3u8" }
+    /// What to ask the provider for: always the file itself. Panels rarely
+    /// offer an HLS version of a movie or episode.
+    public static func requested(_ container: String) -> String { container.lowercased() }
 }

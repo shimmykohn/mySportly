@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Apps that play what the system player can't (MKV and friends). The link
+/// Apps to fall back on when an MKV or similar file won't play here. The link
 /// carries the provider URL with its credentials to the app the user picks.
 enum ExternalPlayer: String, CaseIterable, Identifiable {
     case infuse, vlc
@@ -18,7 +18,7 @@ enum ExternalPlayer: String, CaseIterable, Identifiable {
     }
 }
 
-/// "Open in Infuse / VLC" for a title the app can't play, or links to get them.
+/// "Open in Infuse / VLC" for a title that may not play here, or links to get them.
 struct OpenElsewhere: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openURL) private var openURL
@@ -27,7 +27,7 @@ struct OpenElsewhere: View {
     var body: some View {
         let installed = ExternalPlayer.allCases.filter(\.isInstalled)
         VStack(alignment: .leading, spacing: 10) {
-            Text("This is \(article) \(item.container.uppercased()) file, which iPhone can’t play. Open it in another app; your place there isn’t tracked here.")
+            Text("If this \(item.container.uppercased()) file won’t play here, open it in another app. Your place there isn’t tracked.")
                 .font(.footnote).foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 if installed.isEmpty {
@@ -44,8 +44,6 @@ struct OpenElsewhere: View {
             .buttonStyle(.glass)
         }
     }
-
-    private var article: String { "AEIOU".contains(item.container.uppercased().prefix(1)) ? "an" : "a" }
 
     private func open(in app: ExternalPlayer) {
         guard let media = store.externalMediaURL(item), let link = app.link(for: media) else {

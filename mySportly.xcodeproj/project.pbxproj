@@ -6,6 +6,10 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AE7680013085458800EB0624 /* AetherEngine in Frameworks */ = {isa = PBXBuildFile; productRef = AE7680023085458800EB0624 /* AetherEngine */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		70C2D13F3085458800EB0624 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -64,6 +68,7 @@
 		70C2D12A3085458600EB0624 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				AE7680013085458800EB0624 /* AetherEngine in Frameworks */,
 			);
 		};
 		70C2D13B3085458800EB0624 /* Frameworks */ = {
@@ -118,6 +123,9 @@
 				70C2D12F3085458600EB0624 /* mySportly */,
 			);
 			name = mySportly;
+			packageProductDependencies = (
+				AE7680023085458800EB0624 /* AetherEngine */,
+			);
 			productName = mySportly;
 			productReference = 70C2D12D3085458600EB0624 /* mySportly.app */;
 			productType = "com.apple.product-type.application";
@@ -196,6 +204,9 @@
 			);
 			mainGroup = 70C2D1243085458600EB0624;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AE7680033085458800EB0624 /* XCRemoteSwiftPackageReference "AetherEngine" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 70C2D12E3085458600EB0624 /* Products */;
 			projectDirPath = "";
@@ -606,6 +617,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AE7680033085458800EB0624 /* XCRemoteSwiftPackageReference "AetherEngine" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/superuser404notfound/AetherEngine";
+			requirement = {
+				kind = exactVersion;
+				version = 7.68.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AE7680023085458800EB0624 /* AetherEngine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AE7680033085458800EB0624 /* XCRemoteSwiftPackageReference "AetherEngine" */;
+			productName = AetherEngine;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 70C2D1253085458600EB0624 /* Project object */;
 	validationLevel = 1;

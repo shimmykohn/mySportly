@@ -54,6 +54,7 @@ struct PlayerScreen: View {
     var body: some View {
         let reveal = streamsReveal
         let video = NativePlayerView(player: store.playback.player, onDisplayChange: store.playback.videoDisplayChanged,
+                                     onPictureInPicture: { store.playback.inPictureInPicture = $0 },
                                      onTap: { reveal.reveal() },
                                      fullScreenAccessory: AnyView(RevealedStreams(reveal: reveal).environment(store)))
             .accessibilityLabel("Native video player")
@@ -212,13 +213,12 @@ private struct PlayerDetails: View {
                 // Stands out once the episode ends.
                 if playback.reachedEnd { button.buttonStyle(.glassProminent) } else { button.buttonStyle(.glass) }
             }
-            if let item = store.nowPlayingVOD, playback.errorMessage != nil, !VODFormat.isNative(item.container) {
-                OpenElsewhere(item: item)
-            } else if let error = playback.errorMessage {
+            if let error = playback.errorMessage {
                 HStack {
                     Text(error).font(.subheadline).foregroundStyle(.secondary)
                     Button("Try Again") { playback.retry() }
                 }
+                if let item = store.nowPlayingVOD, !VODFormat.isNative(item.container) { OpenElsewhere(item: item) }
             } else if playback.isLoading {
                 Text(playback.hasVideoFrame ? "Buffering…" : "Connecting…").font(.subheadline).foregroundStyle(.secondary)
             } else if let notice = playback.playbackNotice {
