@@ -8,7 +8,7 @@ import UIKit
         let app = XCUIApplication()
         app.launchArguments = ["--demo"]
         app.launch()
-        app.selectMainTab("Guide")
+        app.openGuide()
         let count = app.staticTexts["guide-channel-count"].firstMatch
         // Sample News HD and SD share a guide ID: one channel with two feeds.
         assertValue(count, "3")

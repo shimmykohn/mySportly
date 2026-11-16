@@ -7,7 +7,6 @@ struct ContentView: View {
         @Bindable var store = store
         TabView(selection: $store.selectedTab) {
             Tab("Home", systemImage: "house", value: AppTab.home) { NavigationStack { HomeView().toolbarTitleDisplayMode(.inline) } }
-            Tab("Guide", systemImage: "list.bullet.rectangle", value: AppTab.guide) { NavigationStack { GuideView().toolbarTitleDisplayMode(.inline) } }
             Tab("My Stuff", systemImage: "square.stack", value: AppTab.myStuff) { NavigationStack { MyStuffView().toolbarTitleDisplayMode(.inline) } }
             Tab("Watch", systemImage: "play.rectangle.on.rectangle", value: AppTab.watch) { NavigationStack { WatchView().toolbarTitleDisplayMode(.inline) } }
             Tab("Search", systemImage: "magnifyingglass", value: AppTab.search) { NavigationStack { SearchScreen().toolbarTitleDisplayMode(.inline) } }
@@ -55,11 +54,19 @@ struct PlayableChannelRow: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("play-channel-\(channel.id)")
             .accessibilityHint("Plays this channel")
-            .contextMenu {
-                Button("Watch", systemImage: "play") { store.play(channel) }
-                Button(store.flag(channel, "favorite") ? "Remove Favorite" : "Favorite", systemImage: store.flag(channel, "favorite") ? "heart.slash" : "heart") { store.toggle(channel, "favorite") }
-                Button("Hide Channel", systemImage: "eye.slash") { store.toggle(channel, "hidden") }
-            }
+            .contextMenu { ChannelActions(channel: channel) }
             .swipeActions(edge: .leading) { Button("Favorite", systemImage: "heart") { store.toggle(channel, "favorite") }.tint(.pink) }
+    }
+}
+
+/// The long-press actions every channel offers.
+struct ChannelActions: View {
+    @Environment(AppStore.self) private var store
+    let channel: Channel
+    var body: some View {
+        let favorite = store.flag(channel, "favorite")
+        Button("Watch", systemImage: "play") { store.play(channel) }
+        Button(favorite ? "Remove Favorite" : "Favorite", systemImage: favorite ? "heart.slash" : "heart") { store.toggle(channel, "favorite") }
+        Button("Hide Channel", systemImage: "eye.slash") { store.toggle(channel, "hidden") }
     }
 }

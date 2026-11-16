@@ -12,7 +12,7 @@ import UIKit
         XCTAssertTrue(app.descendants(matching: .any)["home-root"].firstMatch.waitForExistence(timeout: 30))
         if app.buttons["Connect a Source"].exists || app.navigationBars["Welcome"].exists { throw XCTSkip("Requires a saved provider catalog") }
         waitForCatalog(app)
-        app.selectMainTab("Guide")
+        app.openGuide()
         let count = app.staticTexts["guide-channel-count"].firstMatch
         let ready = NSPredicate { _, _ in (Int(count.value as? String ?? "0") ?? 0) > 0 }
         XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: ready, evaluatedWith: nil)], timeout: 30), .completed)

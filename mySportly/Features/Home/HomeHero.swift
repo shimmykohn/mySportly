@@ -127,6 +127,12 @@ struct HeroChannelPage: View {
                     .accessibilityIdentifier("home-hero-watch")
                 Button(favorite ? "Favorited" : "Favorite", systemImage: favorite ? "heart.fill" : "heart") { store.toggle(channel, "favorite") }
                     .buttonStyle(.glass)
+                Menu {
+                    if let program = item.program { Button("Program Details", systemImage: "info.circle") { store.homeDestination = .program(program, channel) } }
+                    Button("Hide Channel", systemImage: "eye.slash") { store.toggle(channel, "hidden") }
+                } label: { Label("More", systemImage: "ellipsis") }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
             }
         }
     }

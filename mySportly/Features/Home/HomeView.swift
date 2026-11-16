@@ -7,7 +7,9 @@ struct HomeView: View {
     @State private var topInset: CGFloat = 0
 
     var body: some View {
+        @Bindable var store = store
         let content = store.homeContent
+        let onNow = store.homeOnNow
         let isEmpty = content.hero.isEmpty && content.teamGames.isEmpty && content.leagueRows.isEmpty && content.channels.isEmpty
         let continuing = store.continueWatching.first
         let showsHero = (!content.hero.isEmpty || continuing != nil) && !(store.sources.isEmpty && !store.demo && !store.loading)
@@ -54,6 +56,13 @@ struct HomeView: View {
                             }
                         }
                     }
+                    if !onNow.isEmpty {
+                        HomeRow(title: "On Now", identifier: "home-on-now", action: { store.homeDestination = .guide }) {
+                            ForEach(onNow) { item in
+                                if let channel = store.channelIndex[item.channelID] { HomeChannelCard(channel: channel, program: item.program) }
+                            }
+                        }
+                    }
                 }
             }
             .padding(.top, showsHero ? 0 : 8).padding(.bottom, 8)
@@ -71,8 +80,19 @@ struct HomeView: View {
                 ToolbarItem(placement: .principal) { ProgressView() }
             }
             ToolbarItem(placement: .topBarTrailing) {
+                Button("Guide", systemImage: "list.bullet.rectangle") { store.homeDestination = .guide }
+                    .accessibilityIdentifier("home-guide")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button("Settings", systemImage: "person.crop.circle") { store.showSettings = true }
                     .accessibilityIdentifier("home-profile")
+            }
+        }
+        .navigationDestination(item: $store.homeDestination) { destination in
+            switch destination {
+            case .guide: GuideView().toolbarTitleDisplayMode(.inline)
+            case .program(let program, let channel): ProgramDetailView(program: program, channel: channel)
+            case .game(let id): SportsGameView(gameID: id)
             }
         }
         .refreshable { Task { await store.refreshDueSources(force: true) } }
@@ -82,15 +102,29 @@ struct HomeView: View {
     }
 }
 
-/// A titled, horizontally scrolling shelf.
+/// A titled, horizontally scrolling shelf. With an action, the title opens more.
 struct HomeRow<Content: View>: View {
     let title: String
     let identifier: String
+    var action: (() -> Void)?
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline).padding(.horizontal).accessibilityAddTraits(.isHeader)
+            Group {
+                if let action {
+                    Button(action: action) {
+                        HStack(spacing: 4) {
+                            Text(title)
+                            Image(systemName: "chevron.right").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(identifier + "-more")
+                } else { Text(title) }
+            }
+            .font(.headline).padding(.horizontal).accessibilityAddTraits(.isHeader)
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 14) { content }
                     .scrollTargetLayout()

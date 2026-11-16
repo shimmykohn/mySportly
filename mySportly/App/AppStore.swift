@@ -3,7 +3,13 @@ import Observation
 import SwiftUI
 import os
 
-enum AppTab: String, CaseIterable, Codable, Hashable { case home = "Home", guide = "Guide", myStuff = "My Stuff", watch = "Watch", search = "Search" }
+enum AppTab: String, CaseIterable, Codable, Hashable { case home = "Home", myStuff = "My Stuff", watch = "Watch", search = "Search" }
+/// A page pushed on Home's stack: the Guide, or one a context menu opens.
+enum HomeDestination: Hashable {
+    case guide
+    case program(GuideProgram, Channel)
+    case game(String)
+}
 struct ChannelGroup: Codable, Identifiable, Hashable { var id = UUID(); var name: String; var channelIDs: [String] }
 struct AppNotice: Identifiable { let id = UUID(); var title: String; var message: String }
 
@@ -106,6 +112,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private(set) var refreshBatchRunning = false
     private(set) var refreshMessage: String?
     var searchRequest: String?
+    var homeDestination: HomeDestination?
     var demo = false
     private var attemptedRestores = Set<UUID>()
 
@@ -288,6 +295,18 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         }
         return HomeContent.build(sports: homeSports, follows: homeFollows, feedCounts: counts,
                                  favorites: favorites.map { HomeChannel(channelID: $0.id, program: now(on: $0)) }, at: clock)
+    }
+
+    /// Home's On Now shelf: live programs from the head of the lineup, beyond
+    /// the favorites Your Channels already shows. Bounded so Home stays cheap.
+    var homeOnNow: [HomeChannel] {
+        var seen = Set(favorites.map(\.id)), programs = Set<String>(), result: [HomeChannel] = []
+        for channel in lineup.prefix(100) where result.count < 12 && seen.insert(channel.id).inserted {
+            guard let program = now(on: channel), !ListingAvailability.isPlaceholderProgram(program.title),
+                  programs.insert(program.id).inserted else { continue }
+            result.append(HomeChannel(channelID: channel.id, program: program))
+        }
+        return result
     }
 
     func isFollowing(_ team: SportsTeam) -> Bool { homeFollows.teamIDs.contains(team.libraryItem.id) }
@@ -1020,7 +1039,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         let values = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let id = values.first { $0.name == "id" }?.value
         switch url.host {
-        case "guide": selectedTab = .guide
+        case "guide": selectedTab = .home; homeDestination = .guide
         case "search": searchRequest = values.first { $0.name == "query" }?.value ?? ""; selectedTab = .search
         case "refresh": selectedTab = .home; Task { await refreshDueSources(force: true) }
         default: break

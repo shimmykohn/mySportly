@@ -68,7 +68,7 @@ final class ProviderImportUITests: XCTestCase {
         print("[ProviderCheck] cachedLaunchStable=true foregroundStable=true refreshedChannels=\(savedCount) visualProgress=true")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["Done"].tap()
-        app.selectMainTab("Guide")
+        app.openGuide()
         XCTAssertTrue(app.buttons["Guide Time"].waitForExistence(timeout: 15))
         app.selectMainTab("Home")
     }
@@ -103,7 +103,7 @@ final class ProviderImportUITests: XCTestCase {
         print("[ProviderCheck] savedChannels=\(count)")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["Done"].tap()
-        app.selectMainTab("Guide")
+        app.openGuide()
         XCTAssertTrue(app.buttons["Guide Time"].waitForExistence(timeout: 15))
         app.selectMainTab("Home")
     }
@@ -151,7 +151,7 @@ final class ProviderImportUITests: XCTestCase {
         app.terminate()
         app.launch()
         app.waitForSavedCatalog(timeout: 60)
-        app.selectMainTab("Guide")
+        app.openGuide()
         XCTAssertTrue(app.buttons["Guide Time"].waitForExistence(timeout: 15))
         app.selectMainTab("Home")
     }

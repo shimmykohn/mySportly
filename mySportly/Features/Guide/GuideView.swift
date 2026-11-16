@@ -50,7 +50,9 @@ struct GuideView: View {
                         ForEach(visibleChannels) { channel in
                             NavigationLink { ChannelScheduleView(channel: channel, date: date) } label: {
                                 GuideChannelRow(channel: channel, date: date)
-                            }.accessibilityIdentifier("guide-channel-\(channel.id)")
+                            }
+                            .accessibilityIdentifier("guide-channel-\(channel.id)")
+                            .contextMenu { ChannelActions(channel: channel) }
                         }
                         moreChannels(total: matchingChannels.count)
                     } header: { guideSummary }
@@ -150,7 +152,7 @@ struct ChannelScheduleView: View {
                 Button("Watch Channel", systemImage: "play.fill") { store.play(channel) }
             }
             Section("Schedule") {
-                ForEach(programs) { program in NavigationLink { ProgramDetailView(program: program, channel: channel) } label: { ProgramRow(program: program) } }
+                ForEach(programs) { program in NavigationLink { ProgramDetailView(program: program, channel: channel) } label: { ProgramRow(program: program) }.contextMenu { ProgramActions(program: program, channel: channel) } }
                 if programs.isEmpty { Text("No guide listings for this time.").foregroundStyle(.secondary) }
             }
             Section { NavigationLink("Guide Mapping") { GuideMappingView(channel: channel) } }
@@ -174,6 +176,17 @@ struct ProgramRow: View {
     }
 }
 
+/// The long-press actions for a listing: watch it if it's on, or keep its channel.
+struct ProgramActions: View {
+    @Environment(AppStore.self) private var store
+    let program: GuideProgram; let channel: Channel
+    var body: some View {
+        let favorite = store.flag(channel, "favorite")
+        if program.isLive(at: store.clock) { Button("Watch Live", systemImage: "play") { store.play(channel) } }
+        Button(favorite ? "Remove Favorite" : "Favorite Channel", systemImage: favorite ? "heart.slash" : "heart") { store.toggle(channel, "favorite") }
+    }
+}
+
 struct GuideTimeline: View {
     @Environment(AppStore.self) private var store
     let channels: [Channel]; let date: Date
@@ -187,6 +200,7 @@ struct GuideTimeline: View {
                 ForEach(channels) { channel in
                     HStack(spacing: 0) {
                         Button(store.name(channel)) { store.play(channel) }.frame(width: 160, alignment: .leading).lineLimit(3)
+                            .contextMenu { ChannelActions(channel: channel) }
                         ZStack(alignment: .leading) {
                             ForEach(store.programs(for: channel).filter { $0.end > date && $0.start < date.addingTimeInterval(21600) }) { program in
                                 let start = max(0, program.start.timeIntervalSince(date) / 30)
@@ -194,7 +208,7 @@ struct GuideTimeline: View {
                                 NavigationLink { ProgramDetailView(program: program, channel: channel) } label: {
                                     Text(program.title).font(.subheadline).lineLimit(3).frame(width: max(1, end - start - 4), height: 70, alignment: .leading)
                                         .background(.quaternary, in: .rect(cornerRadius: 6)).clipped()
-                                }.buttonStyle(.plain).offset(x: start)
+                                }.buttonStyle(.plain).contextMenu { ProgramActions(program: program, channel: channel) }.offset(x: start)
                             }
                         }.frame(width: 720, height: 80, alignment: .leading)
                     }
