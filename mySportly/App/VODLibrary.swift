@@ -16,6 +16,8 @@ import Observation
     private(set) var movieRows: [VODShelfRow<Movie>] = []
     private(set) var seriesRows: [VODShelfRow<Series>] = []
     private(set) var recentMovies: [Movie] = []
+    /// Bumped whenever the lists change, for views that derive from them.
+    private(set) var revision = 0
     @ObservationIgnored private var catalogs: [UUID: VODCatalog] = [:]
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var movieDetails: [String: MovieDetail] = [:]
@@ -92,6 +94,7 @@ import Observation
             return (movies, series, VODShelf.rows(movies, categories: movieCategories), VODShelf.rows(series, categories: seriesCategories), VODShelf.recentMovies(movies))
         }.value
         (movies, series, movieRows, seriesRows, recentMovies) = built
+        revision += 1
     }
 
     func forget(_ sourceID: UUID, cache: CatalogCache) async {

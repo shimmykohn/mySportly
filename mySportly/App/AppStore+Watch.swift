@@ -15,24 +15,37 @@ extension AppStore {
         if vod.hasContent && (!hadContent || force) { runAIJobs() }
     }
 
-    /// Saved progress by item, with the playing title's live position.
-    var watchProgress: [String: WatchProgress] {
+    /// Saved progress by item, decoded once per change to personal data.
+    private var savedProgress: [String: WatchProgress] {
+        let revision = personal.revision
+        if savedProgressCache.revision == revision { return savedProgressCache.items }
         var all: [String: WatchProgress] = [:]
         for key in personal.keys(prefix: "vod.progress.") {
             guard let item: WatchProgress = personal.value(key, default: nil) else { continue }
             all[item.itemID] = item
         }
+        savedProgressCache = (revision, all)
+        return all
+    }
+    /// Saved progress with the playing title's live position.
+    var watchProgress: [String: WatchProgress] {
+        var all = savedProgress
         if let playing = nowPlayingVOD { all[playing.itemID] = playing }
         return all
+    }
+    /// One title's progress, without copying the whole set (posters ask per item).
+    func progress(for itemID: String) -> WatchProgress? {
+        if let playing = nowPlayingVOD, playing.itemID == itemID { return playing }
+        return savedProgress[itemID]
     }
     var continueWatching: [WatchProgress] { ContinueWatching.items(Array(watchProgress.values)) }
 
     func progressItem(for movie: Movie) -> WatchProgress {
-        watchProgress[movie.id] ?? WatchProgress(itemID: movie.id, kind: .movie, sourceID: movie.sourceID, providerID: movie.providerID,
+        progress(for: movie.id) ?? WatchProgress(itemID: movie.id, kind: .movie, sourceID: movie.sourceID, providerID: movie.providerID,
                                                  container: movie.container, title: movie.title, subtitle: movie.year.map(String.init) ?? "", artwork: movie.poster)
     }
     func progressItem(for episode: Episode, of show: Series) -> WatchProgress {
-        watchProgress[episode.id] ?? WatchProgress(itemID: episode.id, kind: .episode, sourceID: show.sourceID, providerID: episode.providerID,
+        progress(for: episode.id) ?? WatchProgress(itemID: episode.id, kind: .episode, sourceID: show.sourceID, providerID: episode.providerID,
                                                    container: episode.container, title: show.title, subtitle: "\(episode.code) · \(episode.title)",
                                                    artwork: show.poster, seriesID: show.id, duration: episode.duration ?? 0)
     }

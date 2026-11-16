@@ -5,9 +5,17 @@ struct WatchView: View {
     enum Shelf: String, CaseIterable, Identifiable { case movies = "Movies", shows = "TV Shows"; var id: Self { self } }
     @Environment(AppStore.self) private var store
     @State private var shelf = Shelf.movies
+    @State private var filter = VODFilter()
+    @State private var filtered = Filtered()
+    @State private var decades: [Int] = []
+
+    /// Filter results, worked out off the main thread: catalogs can be large.
+    struct Filtered { var movies: [Movie] = []; var shows: [Series] = []; var ready = false }
+    private struct FilterKey: Equatable { let filter: VODFilter; let shelf: Shelf; let revision: Int; let watched: Set<String> }
 
     var body: some View {
         let library = store.vod
+        let watched = watchedIDs
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
                 Picker("Show", selection: $shelf) {
@@ -17,30 +25,10 @@ struct WatchView: View {
                 .padding(.horizontal)
                 .accessibilityIdentifier("watch-shelf")
 
-                let continuing = store.continueWatching.filter { shelf == .movies ? $0.kind == .movie : $0.kind == .episode }
-                if !continuing.isEmpty {
-                    HomeRow(title: "Continue Watching", identifier: "watch-continue") {
-                        ForEach(continuing) { ContinueCard(item: $0) }
-                    }
-                }
-                switch shelf {
-                case .movies:
-                    if !library.recentMovies.isEmpty {
-                        HomeRow(title: VODShelf.recentlyAdded, identifier: "watch-recent") {
-                            ForEach(library.recentMovies) { MovieLink(movie: $0) }
-                        }
-                    }
-                    ForEach(library.movieRows) { row in
-                        ShelfRow(title: row.title, identifier: "watch-row-\(row.id)") {
-                            ForEach(row.items.prefix(20)) { MovieLink(movie: $0) }
-                        } all: { VODGrid(title: row.title, movies: row.items) }
-                    }
-                case .shows:
-                    ForEach(library.seriesRows) { row in
-                        ShelfRow(title: row.title, identifier: "watch-row-\(row.id)") {
-                            ForEach(row.items.prefix(20)) { ShowLink(show: $0) }
-                        } all: { VODGrid(title: row.title, shows: row.items) }
-                    }
+                if filter.isActive {
+                    FilteredGrid(shelf: shelf, filtered: filtered) { filter = VODFilter() }
+                } else {
+                    shelves(library)
                 }
                 if let problem = library.refreshProblem {
                     Label(problem, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
@@ -52,10 +40,86 @@ struct WatchView: View {
         .navigationTitle("Watch")
         .toolbar {
             if library.refreshing { ToolbarItem(placement: .topBarTrailing) { ProgressView() } }
+            ToolbarItem(placement: .topBarTrailing) { filterMenu(library) }
         }
         .refreshable { await store.loadVOD(force: true) }
         .task { await store.loadVOD() }
+        .onChange(of: shelf) { _, _ in filter.category = nil; filter.decade = nil }
+        .task(id: FilterKey(filter: filter, shelf: shelf, revision: library.revision, watched: watched)) {
+            let filter = filter, movieRows = library.movieRows, seriesRows = library.seriesRows, shelf = shelf
+            let result = await Task.detached(priority: .userInitiated) {
+                shelf == .movies
+                    ? (Filtered(movies: filter.isActive ? filter.apply(movieRows, watched: watched) : [], ready: true), VODFilter.decades(movieRows.flatMap(\.items)))
+                    : (Filtered(shows: filter.isActive ? filter.apply(seriesRows, watched: watched) : [], ready: true), VODFilter.decades(seriesRows.flatMap(\.items)))
+            }.value
+            guard !Task.isCancelled else { return }
+            (filtered, decades) = result
+        }
         .accessibilityIdentifier("watch-root")
+    }
+
+    /// Finished movies, and shows with any episode started or finished.
+    private var watchedIDs: Set<String> {
+        guard filter.unwatched else { return [] }
+        let progress = store.watchProgress.values
+        return shelf == .movies ? Set(progress.filter { $0.kind == .movie && $0.isFinished }.map(\.itemID)) : Set(progress.compactMap(\.seriesID))
+    }
+
+    private func filterMenu(_ library: VODLibrary) -> some View {
+        Menu {
+            Picker("Sort By", selection: $filter.sort) {
+                ForEach(VODFilter.Sort.allCases, id: \.self) { sort in
+                    if sort != .recent || shelf == .movies { Text(sort.rawValue).tag(sort) }
+                }
+            }
+            Picker("Category", selection: $filter.category) {
+                Text("All Categories").tag(String?.none)
+                ForEach((shelf == .movies ? library.movieRows.map(\.title) : library.seriesRows.map(\.title)), id: \.self) { Text($0).tag(Optional($0)) }
+            }
+            .pickerStyle(.menu)
+            if !decades.isEmpty {
+                Picker("Decade", selection: $filter.decade) {
+                    Text("Any Year").tag(Int?.none)
+                    ForEach(decades, id: \.self) { Text("\(String($0))s").tag(Optional($0)) }
+                }
+                .pickerStyle(.menu)
+            }
+            Toggle(shelf == .movies ? "Unwatched Only" : "Not Started Only", isOn: $filter.unwatched)
+            if filter.isActive {
+                Button("Reset", systemImage: "arrow.counterclockwise", role: .destructive) { filter = VODFilter() }
+            }
+        } label: {
+            Label("Filter", systemImage: filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+        }
+        .accessibilityIdentifier("watch-filter")
+    }
+
+    @ViewBuilder private func shelves(_ library: VODLibrary) -> some View {
+        let continuing = store.continueWatching.filter { shelf == .movies ? $0.kind == .movie : $0.kind == .episode }
+        if !continuing.isEmpty {
+            HomeRow(title: "Continue Watching", identifier: "watch-continue") {
+                ForEach(continuing) { ContinueCard(item: $0) }
+            }
+        }
+        switch shelf {
+        case .movies:
+            if !library.recentMovies.isEmpty {
+                HomeRow(title: VODShelf.recentlyAdded, identifier: "watch-recent") {
+                    ForEach(library.recentMovies) { MovieLink(movie: $0) }
+                }
+            }
+            ForEach(library.movieRows) { row in
+                ShelfRow(title: row.title, identifier: "watch-row-\(row.id)") {
+                    ForEach(row.items.prefix(20)) { MovieLink(movie: $0) }
+                } all: { VODGrid(title: row.title, movies: row.items) }
+            }
+        case .shows:
+            ForEach(library.seriesRows) { row in
+                ShelfRow(title: row.title, identifier: "watch-row-\(row.id)") {
+                    ForEach(row.items.prefix(20)) { ShowLink(show: $0) }
+                } all: { VODGrid(title: row.title, shows: row.items) }
+            }
+        }
     }
 
     @ViewBuilder private var emptyState: some View {
@@ -84,6 +148,34 @@ struct WatchView: View {
                 }
             }
         }
+    }
+}
+
+/// Filter results as a poster grid, with the count and a way back.
+private struct FilteredGrid: View {
+    let shelf: WatchView.Shelf
+    let filtered: WatchView.Filtered
+    let reset: () -> Void
+
+    var body: some View {
+        let count = shelf == .movies ? filtered.movies.count : filtered.shows.count
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(filtered.ready ? "\(count.formatted()) \(count == 1 ? "Title" : "Titles")" : "Filtering…").font(.headline)
+                Spacer()
+                Button("Clear Filters", action: reset).font(.subheadline)
+            }
+            .padding(.horizontal)
+            if filtered.ready && count == 0 {
+                ContentUnavailableView("No Matches", systemImage: "line.3.horizontal.decrease.circle", description: Text("Try fewer filters."))
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 12, alignment: .top)], spacing: 18) {
+                if shelf == .movies { ForEach(filtered.movies) { MovieLink(movie: $0, width: nil) } }
+                else { ForEach(filtered.shows) { ShowLink(show: $0, width: nil) } }
+            }
+            .padding(.horizontal)
+        }
+        .accessibilityIdentifier("watch-filtered")
     }
 }
 
@@ -143,7 +235,7 @@ struct MovieLink: View {
     var width: CGFloat? = 112
     var body: some View {
         NavigationLink { MovieDetailView(movie: movie) } label: {
-            PosterCard(title: movie.title, artwork: movie.poster, progress: store.watchProgress[movie.id], width: width)
+            PosterCard(title: movie.title, artwork: movie.poster, progress: store.progress(for: movie.id), width: width)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("movie-\(movie.id)")

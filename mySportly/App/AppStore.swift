@@ -25,6 +25,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     /// The episode after the one playing, when known.
     var vodUpNext: VODUpNext?
     @ObservationIgnored private var vodPersisted = Date.distantPast
+    /// Saved progress decoded once per personal-data revision.
+    @ObservationIgnored var savedProgressCache: (revision: Int, items: [String: WatchProgress]) = (-1, [:])
     let openAI = OpenAIService()
     let sportsData = SportsDataStore()
     private(set) var gameLinks: [String: [SportsFeedLink]] = [:]

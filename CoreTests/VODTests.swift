@@ -138,3 +138,33 @@ struct VODFormatTests {
         #expect(!VODFormat.isNative("webm"))
     }
 }
+
+struct VODFilterTests {
+    let source = UUID()
+    func movie(_ id: String, _ title: String, year: Int?, rating: Double?, added: Double?, category: String) -> Movie {
+        Movie(id: id, sourceID: source, providerID: id, rawTitle: title, title: title, year: year, categoryID: category, rating: rating, added: added.map(Date.init(timeIntervalSince1970:)))
+    }
+
+    @Test func filtersCombineAndSort() {
+        let action = [movie("a", "Heat", year: 1995, rating: 8.3, added: 1, category: "1"), movie("b", "Up", year: 2009, rating: 8.0, added: 3, category: "1")]
+        let drama = [movie("c", "Amélie", year: 2001, rating: 8.4, added: 2, category: "2"), movie("a", "Heat", year: 1995, rating: 8.3, added: 1, category: "2")]
+        let rows = [VODShelfRow(id: "Action", title: "Action", items: action), VODShelfRow(id: "Drama", title: "Drama", items: drama)]
+        var filter = VODFilter()
+        #expect(!filter.isActive)
+        #expect(filter.apply(rows).map(\.id) == ["a", "b", "c"], "Duplicates across shelves appear once")
+        filter.sort = .title
+        #expect(filter.apply(rows).map(\.id) == ["c", "a", "b"])
+        filter.sort = .rating
+        #expect(filter.apply(rows).map(\.id) == ["c", "a", "b"])
+        filter.sort = .recent
+        #expect(filter.apply(rows).map(\.id) == ["b", "c", "a"])
+        filter.category = "Drama"; filter.sort = .year
+        #expect(filter.apply(rows).map(\.id) == ["c", "a"])
+        filter.decade = 1990
+        #expect(filter.apply(rows).map(\.id) == ["a"])
+        filter.unwatched = true
+        #expect(filter.apply(rows, watched: ["a"]).isEmpty)
+        #expect(filter.isActive)
+        #expect(VODFilter.decades(action + drama) == [2000, 1990])
+    }
+}

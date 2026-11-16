@@ -9,7 +9,8 @@ struct HomeView: View {
     var body: some View {
         let content = store.homeContent
         let isEmpty = content.hero.isEmpty && content.teamGames.isEmpty && content.leagueRows.isEmpty && content.channels.isEmpty
-        let showsHero = !content.hero.isEmpty && !(store.sources.isEmpty && !store.demo && !store.loading)
+        let continuing = store.continueWatching.first
+        let showsHero = (!content.hero.isEmpty || continuing != nil) && !(store.sources.isEmpty && !store.demo && !store.loading)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
                 if let error = store.personal.storageError {
@@ -25,10 +26,7 @@ struct HomeView: View {
                     }
                 } else {
                     if showsHero {
-                        HomeHeroPager(items: content.hero, topInset: topInset).accessibilityIdentifier("home-hero")
-                    }
-                    if let latest = store.continueWatching.first {
-                        HomeContinueCard(item: latest).padding(.horizontal)
+                        HomeHeroPager(items: content.hero, continuing: continuing, topInset: topInset).accessibilityIdentifier("home-hero")
                     }
                     if content.showsFollowPrompt {
                         ContentUnavailableView {
@@ -103,38 +101,5 @@ struct HomeRow<Content: View>: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
-    }
-}
-
-/// The most recent unfinished movie or episode, first thing on Home.
-private struct HomeContinueCard: View {
-    @Environment(AppStore.self) private var store
-    let item: WatchProgress
-
-    var body: some View {
-        HStack(spacing: 14) {
-            Poster(url: item.artwork, title: item.title).frame(width: 64)
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Continue Watching").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Text(item.title).font(.headline).lineLimit(1)
-                if !item.subtitle.isEmpty { Text(item.subtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1) }
-                HStack(spacing: 8) {
-                    ProgressView(value: item.fraction)
-                    Text("\(item.remaining.watchDuration) left").font(.caption).foregroundStyle(.secondary).fixedSize()
-                }
-            }
-            Button("Resume", systemImage: "play.fill") { store.resume(item) }
-                .labelStyle(.iconOnly).font(.title3)
-                .buttonStyle(.glassProminent).buttonBorderShape(.circle)
-                .accessibilityIdentifier("home-resume")
-        }
-        .padding(12)
-        .background(.fill.tertiary, in: .rect(cornerRadius: 18))
-        .contextMenu {
-            Button("Mark as Watched", systemImage: "checkmark.circle") { store.setWatched(item, true) }
-            Button("Remove from Continue Watching", systemImage: "minus.circle", role: .destructive) { store.clearProgress(item) }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("home-continue")
     }
 }

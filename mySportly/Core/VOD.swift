@@ -388,9 +388,45 @@ public protocol VODItem: Sendable, Identifiable where ID == String {
     var sourceID: UUID { get }
     var categoryID: String { get }
     var title: String { get }
+    var year: Int? { get }
+    var rating: Double? { get }
+    var addedDate: Date? { get }
 }
-extension Movie: VODItem {}
-extension Series: VODItem {}
+extension Movie: VODItem { public var addedDate: Date? { added } }
+extension Series: VODItem { public var addedDate: Date? { nil } }
+
+/// Sort and narrow a shelf in the Watch tab.
+public struct VODFilter: Hashable, Sendable {
+    public enum Sort: String, CaseIterable, Sendable { case featured = "Featured", recent = "Recently Added", title = "Title", year = "Newest", rating = "Top Rated" }
+    public var sort = Sort.featured
+    public var category: String?
+    /// The first year of a decade, e.g. 1990.
+    public var decade: Int?
+    public var unwatched = false
+    public init() {}
+    /// Anything other than the plain shelves.
+    public var isActive: Bool { self != VODFilter() }
+
+    public func apply<Item: VODItem>(_ rows: [VODShelfRow<Item>], watched: Set<String> = []) -> [Item] {
+        var seen = Set<String>()
+        var items = rows.filter { category == nil || $0.title == category }.flatMap(\.items).filter { seen.insert($0.id).inserted }
+        if let decade { items = items.filter { $0.year.map { $0 >= decade && $0 < decade + 10 } == true } }
+        if unwatched { items = items.filter { !watched.contains($0.id) } }
+        switch sort {
+        case .featured: break
+        case .recent: items.sort { ($0.addedDate ?? .distantPast) > ($1.addedDate ?? .distantPast) }
+        case .title: items.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        case .year: items.sort { ($0.year ?? 0) > ($1.year ?? 0) }
+        case .rating: items.sort { ($0.rating ?? 0) > ($1.rating ?? 0) }
+        }
+        return items
+    }
+
+    /// Decades present in the items, newest first.
+    public static func decades<Item: VODItem>(_ items: [Item]) -> [Int] {
+        Set(items.compactMap { $0.year.map { $0 / 10 * 10 } }).sorted(by: >)
+    }
+}
 
 public struct VODShelfRow<Item: VODItem>: Sendable, Identifiable {
     public let id: String

@@ -9,11 +9,17 @@ extension EnvironmentValues {
 /// and fade into the page below.
 struct HomeHeroPager: View {
     let items: [HomeHero]
+    /// The most recent unfinished movie or episode, as the first page.
+    var continuing: WatchProgress?
     var topInset: CGFloat = 0
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
+        let pages = items.count + (continuing == nil ? 0 : 1)
         TabView {
+            if let continuing {
+                HeroContinuePage(item: continuing).playerSource("hero.continue")
+            }
             ForEach(items) { item in
                 Group {
                     switch item {
@@ -24,7 +30,7 @@ struct HomeHeroPager: View {
                 .playerSource("hero.\(item.id)")
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .always : .never))
+        .tabViewStyle(.page(indexDisplayMode: pages > 1 ? .always : .never))
         .environment(\.heroTopInset, topInset)
         .frame(height: (sizeClass == .regular ? 460 : 380) + topInset)
     }
@@ -157,5 +163,51 @@ struct HeroCard<Art: View, Details: View, Actions: View>: View {
                 .padding(.bottom, Self.fade - 8)
             }
             .accessibilityElement(children: .contain)
+    }
+}
+
+/// A movie or episode in progress: its artwork across the page, the poster on
+/// glass, and Resume.
+struct HeroContinuePage: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.heroTopInset) private var topInset
+    let item: WatchProgress
+
+    var body: some View {
+        HeroCard {
+            Color.clear
+                .overlay {
+                    AsyncImage(url: item.artwork) { phase in
+                        if let image = phase.image { image.resizable().scaledToFill().blur(radius: 30).saturation(1.3) }
+                        else { LinearGradient(colors: [.indigo.opacity(0.6), .secondary.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing) }
+                    }
+                }
+                .clipped()
+                .overlay(alignment: .top) {
+                    Poster(url: item.artwork, title: item.title)
+                        .frame(height: 150)
+                        .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
+                        .padding(.top, 18 + topInset)
+                }
+        } details: {
+            Label("Continue Watching", systemImage: "play.circle.fill").font(.caption.weight(.semibold)).opacity(0.9)
+            Text(item.title).font(.title3.bold()).lineLimit(2)
+            if !item.subtitle.isEmpty { Text(item.subtitle).font(.subheadline).opacity(0.85).lineLimit(1) }
+            HStack(spacing: 8) {
+                ProgressView(value: item.fraction).tint(.white).frame(maxWidth: 140)
+                Text("\(item.remaining.watchDuration) left").font(.caption).opacity(0.85)
+            }
+        } actions: {
+            Button("Resume", systemImage: "play.fill") { store.resume(item) }
+                .buttonStyle(.glassProminent)
+                .accessibilityIdentifier("home-resume")
+            Menu {
+                Button("Mark as Watched", systemImage: "checkmark.circle") { store.setWatched(item, true) }
+                Button("Remove from Continue Watching", systemImage: "minus.circle", role: .destructive) { store.clearProgress(item) }
+            } label: { Label("More", systemImage: "ellipsis") }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glass)
+        }
+        .accessibilityIdentifier("home-continue")
     }
 }
