@@ -238,11 +238,13 @@ struct MovieLink: View {
             PosterCard(title: movie.title, artwork: movie.poster, progress: store.progress(for: movie.id), width: width)
         }
         .buttonStyle(.plain)
+        .contextMenu { MovieMenu(movie: movie) }
         .accessibilityIdentifier("movie-\(movie.id)")
     }
 }
 
 struct ShowLink: View {
+    @Environment(AppStore.self) private var store
     let show: Series
     var width: CGFloat? = 112
     var body: some View {
@@ -250,7 +252,27 @@ struct ShowLink: View {
             PosterCard(title: show.title, artwork: show.poster, progress: nil, width: width)
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button("Play", systemImage: "play.fill") { store.playNext(of: show) }
+        }
         .accessibilityIdentifier("show-\(show.id)")
+    }
+}
+
+/// Long-press actions for a movie, wherever it appears.
+struct MovieMenu: View {
+    @Environment(AppStore.self) private var store
+    let movie: Movie
+    var body: some View {
+        let progress = store.progressItem(for: movie)
+        Button(progress.resumePosition != nil ? "Resume" : "Play", systemImage: "play.fill") { store.play(movie) }
+        if progress.resumePosition != nil {
+            Button("Play from Beginning", systemImage: "arrow.counterclockwise") { store.play(movie, fromStart: true) }
+        }
+        Button(progress.isFinished ? "Mark as Unwatched" : "Mark as Watched", systemImage: progress.isFinished ? "circle" : "checkmark.circle") {
+            store.setWatched(progress, !progress.isFinished)
+        }
+        ExternalPlayItems(item: progress)
     }
 }
 

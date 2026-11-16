@@ -69,6 +69,16 @@ extension AppStore {
             vodUpNext = VODUpNext(show: show, episode: next)
         }
     }
+    /// From a show's poster: the episode in progress, else the next one.
+    func playNext(of show: Series) {
+        Task {
+            guard let detail = await vod.detail(for: show, provider: provider, demo: demo),
+                  let episode = ContinueWatching.upNext(in: detail, progress: watchProgress) else {
+                inform("Nothing to play", "This show’s episodes aren’t available right now."); return
+            }
+            play(episode, of: show, in: detail)
+        }
+    }
     func playUpNext() {
         guard let next = vodUpNext else { return }
         Task {

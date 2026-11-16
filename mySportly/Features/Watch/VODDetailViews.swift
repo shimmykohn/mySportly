@@ -13,15 +13,7 @@ struct MovieDetailView: View {
             VODHero(artwork: movie.poster, backdrop: detail?.backdrop, title: movie.title,
                     facts: [(movie.year ?? detail?.year).map(String.init), duration?.watchDuration, detail?.genre.nonEmpty, movie.rating.map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" }])
             VStack(alignment: .leading, spacing: 20) {
-                VStack(spacing: 10) {
-                    PlayButton(progress: progress) { store.play(movie) }
-                    if progress.resumePosition != nil {
-                        Button("Play from Beginning", systemImage: "arrow.counterclockwise") { store.play(movie, fromStart: true) }
-                            .buttonStyle(.glass).controlSize(.large).frame(maxWidth: .infinity)
-                    }
-                    WatchedButton(progress: progress)
-                }
-                if !VODFormat.isNative(movie.container) { OpenElsewhere(item: progress) }
+                PlayRow(progress: progress) { store.play(movie) } fromStart: { store.play(movie, fromStart: true) }
                 if let plot = detail?.plot.nonEmpty { Text(plot).font(.body) }
                 if let director = detail?.director.nonEmpty { LabeledContent("Director", value: director).font(.subheadline) }
                 if let cast = detail?.cast.nonEmpty { LabeledContent("Cast") { Text(cast).multilineTextAlignment(.trailing) }.font(.subheadline) }
@@ -51,8 +43,9 @@ struct SeriesDetailView: View {
             VStack(alignment: .leading, spacing: 20) {
                 if let upNext, let detail {
                     let item = store.progressItem(for: upNext, of: show)
-                    PlayButton(progress: item, label: upNext.code) { store.play(upNext, of: show, in: detail) }
-                    if !VODFormat.isNative(upNext.container) { OpenElsewhere(item: item) }
+                    PlayRow(progress: item, label: upNext.code) { store.play(upNext, of: show, in: detail) } fromStart: {
+                        store.play(upNext, of: show, in: detail, fromStart: true)
+                    }
                 }
                 if !show.plot.isEmpty { Text(show.plot).font(.body) }
                 if let detail, !detail.seasons.isEmpty {
@@ -91,7 +84,6 @@ struct SeriesDetailView: View {
 
 private struct EpisodeRow: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.openURL) private var openURL
     let episode: Episode
     let show: Series
     let detail: SeriesDetail
@@ -127,11 +119,7 @@ private struct EpisodeRow: View {
             Button(progress.isFinished ? "Mark as Unwatched" : "Mark as Watched", systemImage: progress.isFinished ? "circle" : "checkmark.circle") {
                 store.setWatched(progress, !progress.isFinished)
             }
-            if !VODFormat.isNative(episode.container), let media = store.externalMediaURL(progress) {
-                ForEach(ExternalPlayer.allCases.filter(\.isInstalled)) { app in
-                    if let link = app.link(for: media) { Button("Open in \(app.name)", systemImage: "arrow.up.forward.app") { openURL(link) } }
-                }
-            }
+            ExternalPlayItems(item: progress)
         }
         .accessibilityIdentifier("episode-\(episode.id)")
     }
@@ -174,43 +162,62 @@ private struct VODHero: View {
     }
 }
 
-/// Play, or Resume with the time left.
-private struct PlayButton: View {
-    let progress: WatchProgress
-    var label: String?
-    let action: () -> Void
-
-    var body: some View {
-        let resuming = progress.resumePosition != nil
-        Button(action: action) {
-            VStack(spacing: 6) {
-                Label([resuming ? "Resume" : "Play", label].compactMap { $0 }.joined(separator: " "), systemImage: "play.fill")
-                    .font(.headline)
-                if resuming {
-                    HStack(spacing: 8) {
-                        ProgressView(value: progress.fraction).frame(width: 80)
-                        Text("\(progress.remaining.watchDuration) left").font(.caption)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.glassProminent)
-        .controlSize(.large)
-        .accessibilityIdentifier("vod-play")
-    }
-}
-
-private struct WatchedButton: View {
+/// Play (or Resume, with the time left) and the watched mark on one line.
+/// Once watched, Play shrinks to its icon and the mark reads "Watched".
+/// Long-press Play to start over or play in Infuse or VLC.
+private struct PlayRow: View {
     @Environment(AppStore.self) private var store
     let progress: WatchProgress
+    var label: String?
+    let play: () -> Void
+    let fromStart: () -> Void
+
     var body: some View {
-        let watched = progress.isFinished
-        Button(watched ? "Watched" : "Mark as Watched", systemImage: watched ? "checkmark.circle.fill" : "checkmark.circle") {
-            store.setWatched(progress, !watched)
+        HStack(spacing: 10) {
+            if progress.isFinished {
+                Button("Play", systemImage: "play.fill", action: play)
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glassProminent).buttonBorderShape(.circle)
+                    .contextMenu { menu }
+                    .accessibilityIdentifier("vod-play")
+                Button { store.setWatched(progress, false) } label: {
+                    Label("Watched", systemImage: "checkmark.circle.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .accessibilityHint("Marks it as unwatched")
+                .accessibilityIdentifier("vod-watched")
+            } else {
+                let resuming = progress.resumePosition != nil
+                Button(action: play) {
+                    VStack(spacing: 6) {
+                        Label([resuming ? "Resume" : "Play", label].compactMap { $0 }.joined(separator: " "), systemImage: "play.fill")
+                        if resuming {
+                            HStack(spacing: 8) {
+                                ProgressView(value: progress.fraction).frame(width: 80)
+                                Text("\(progress.remaining.watchDuration) left").font(.caption)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassProminent)
+                .contextMenu { menu }
+                .accessibilityIdentifier("vod-play")
+                Button("Mark as Watched", systemImage: "checkmark") { store.setWatched(progress, true) }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass).buttonBorderShape(.circle)
+                    .accessibilityIdentifier("vod-watched")
+            }
         }
-        .buttonStyle(.glass).controlSize(.large).frame(maxWidth: .infinity)
-        .accessibilityIdentifier("vod-watched")
+        .font(.headline)
+        .controlSize(.large)
+    }
+
+    @ViewBuilder private var menu: some View {
+        if progress.resumePosition != nil || progress.isFinished {
+            Button("Play from Beginning", systemImage: "arrow.counterclockwise", action: fromStart)
+        }
+        ExternalPlayItems(item: progress)
     }
 }
 

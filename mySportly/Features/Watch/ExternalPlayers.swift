@@ -27,8 +27,6 @@ struct OpenElsewhere: View {
     var body: some View {
         let installed = ExternalPlayer.allCases.filter(\.isInstalled)
         VStack(alignment: .leading, spacing: 10) {
-            Text("If this \(item.container.uppercased()) file won’t play here, open it in another app. Your place there isn’t tracked.")
-                .font(.footnote).foregroundStyle(.secondary)
             HStack(spacing: 10) {
                 if installed.isEmpty {
                     ForEach(ExternalPlayer.allCases) { app in
@@ -50,5 +48,33 @@ struct OpenElsewhere: View {
             store.inform("Couldn’t open", "This title’s address isn’t available right now."); return
         }
         openURL(link)
+    }
+}
+
+/// Menu items for a title's long-press menu: play it in Infuse or VLC, or
+/// get one of them.
+struct ExternalPlayItems: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.openURL) private var openURL
+    let item: WatchProgress
+
+    var body: some View {
+        let installed = ExternalPlayer.allCases.filter(\.isInstalled)
+        if installed.isEmpty {
+            Menu("Play in Another App", systemImage: "arrow.up.forward.app") {
+                ForEach(ExternalPlayer.allCases) { app in
+                    Button("Get \(app.name)", systemImage: "arrow.down.app") { openURL(app.appStore) }
+                }
+            }
+        } else {
+            ForEach(installed) { app in
+                Button("Play in \(app.name)", systemImage: "arrow.up.forward.app") {
+                    guard let media = store.externalMediaURL(item), let link = app.link(for: media) else {
+                        store.inform("Couldn’t open", "This title’s address isn’t available right now."); return
+                    }
+                    openURL(link)
+                }
+            }
+        }
     }
 }

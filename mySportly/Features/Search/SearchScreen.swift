@@ -66,6 +66,7 @@ struct SearchScreen: View {
                             NavigationLink { MovieDetailView(movie: movie) } label: {
                                 VODResultRow(title: movie.title, detail: movie.year.map(String.init) ?? "Movie", artwork: movie.poster)
                             }
+                            .contextMenu { MovieMenu(movie: movie) }
                         }
                     }
                     .accessibilityIdentifier("search-movies")
@@ -76,6 +77,7 @@ struct SearchScreen: View {
                             NavigationLink { SeriesDetailView(show: show) } label: {
                                 VODResultRow(title: show.title, detail: show.year.map(String.init) ?? "TV Show", artwork: show.poster)
                             }
+                            .contextMenu { Button("Play", systemImage: "play.fill") { store.playNext(of: show) } }
                         }
                     }
                     .accessibilityIdentifier("search-shows")
@@ -188,6 +190,7 @@ extension SearchScreen {
 }
 
 private struct SearchResultRow: View {
+    @Environment(AppStore.self) private var store
     let match: CatalogMatch
     var body: some View {
         if let program = match.program {
@@ -196,6 +199,11 @@ private struct SearchResultRow: View {
                     ProgramRow(program: program)
                     Text(match.name).font(.caption).foregroundStyle(.secondary)
                 }
+            }
+            .contextMenu {
+                Button("Watch Channel", systemImage: "play.fill") { store.play(match.channel) }
+                let favorite = store.flag(match.channel, "favorite")
+                Button(favorite ? "Remove Favorite" : "Favorite Channel", systemImage: favorite ? "heart.slash" : "heart") { store.toggle(match.channel, "favorite") }
             }
         } else {
             PlayableChannelRow(channel: match.channel)

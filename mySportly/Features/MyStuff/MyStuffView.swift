@@ -20,6 +20,7 @@ struct MyStuffView: View {
                     ForEach(teams) { team in
                         NavigationLink { TeamPage(team: team) } label: { SportsItemLabel(item: team) }
                             .swipeActions { Button("Unfollow", role: .destructive) { store.unfollow(team) } }
+                            .contextMenu { Button("Unfollow", systemImage: "minus.circle", role: .destructive) { store.unfollow(team) } }
                             .accessibilityIdentifier("my-stuff-team-\(team.name)")
                     }
                 }
@@ -29,6 +30,7 @@ struct MyStuffView: View {
                     ForEach(leagues) { league in
                         NavigationLink { LeaguePage(league: league) } label: { SportsItemLabel(item: league) }
                             .swipeActions { Button("Remove", role: .destructive) { store.unfollow(league) } }
+                            .contextMenu { Button("Remove League", systemImage: "minus.circle", role: .destructive) { store.unfollow(league) } }
                             .accessibilityIdentifier("my-stuff-league-\(league.name)")
                     }
                 }
