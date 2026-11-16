@@ -75,6 +75,8 @@ struct HomeView: View {
         // Verbatim: a localized key would format 1234 as "1,234".
         .accessibilityValue(Text(verbatim: "launch-ms=\(store.launchTimeline.milliseconds(to: .firstInteractive) ?? -1) ready=\(store.catalogReady ? 1 : 0)"))
         .navigationTitle("Home")
+        // The hero is the header; the title stays for the back button and accessibility.
+        .toolbar(removing: .title)
         .toolbar {
             if !store.catalogReady && isEmpty && !store.sources.isEmpty {
                 ToolbarItem(placement: .principal) { ProgressView() }
