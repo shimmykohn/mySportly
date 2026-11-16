@@ -172,29 +172,22 @@ struct HeroCard<Art: View, Details: View, Actions: View>: View {
     }
 }
 
-/// A movie or episode in progress: its artwork across the page, the poster on
-/// glass, and Resume.
+/// A movie or episode in progress: its artwork across the page, and Resume.
 struct HeroContinuePage: View {
     @Environment(AppStore.self) private var store
-    @Environment(\.heroTopInset) private var topInset
     let item: WatchProgress
 
     var body: some View {
         HeroCard {
+            // The artwork itself fills the page, up under the bars.
             Color.clear
-                .overlay {
+                .overlay(alignment: .top) {
                     AsyncImage(url: item.artwork) { phase in
-                        if let image = phase.image { image.resizable().scaledToFill().blur(radius: 30).saturation(1.3) }
+                        if let image = phase.image { image.resizable().scaledToFill() }
                         else { LinearGradient(colors: [.indigo.opacity(0.6), .secondary.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing) }
                     }
                 }
                 .clipped()
-                .overlay(alignment: .top) {
-                    Poster(url: item.artwork, title: item.title)
-                        .frame(height: 150)
-                        .shadow(color: .black.opacity(0.35), radius: 12, y: 6)
-                        .padding(.top, 18 + topInset)
-                }
         } details: {
             Label("Continue Watching", systemImage: "play.circle.fill").font(.caption.weight(.semibold)).opacity(0.9)
             Text(item.title).font(.title3.bold()).lineLimit(2)
