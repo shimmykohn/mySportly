@@ -41,17 +41,4 @@ struct FeedMergingTests {
         let many = (0..<20).map { channel("m\($0)", "Event HD") }
         #expect(FeedMerging.candidates(many, strict: []).isEmpty)
     }
-
-    @Test func onlyConfidentSameAnswersCount() {
-        #expect(FeedMerging.accepted(DecisionAnswer(name: "k", choice: "same", confidence: 0.9, probability: 0.9)))
-        #expect(!FeedMerging.accepted(DecisionAnswer(name: "k", choice: "same", confidence: 0.6, probability: 0.9)))
-        #expect(!FeedMerging.accepted(DecisionAnswer(name: "k", choice: "different", confidence: 0.99, probability: 0.99)))
-    }
-
-    @Test func questionsAreTwoWayChoices() {
-        let pair = MergeCandidate(anchor: channel("a", "ESPN"), other: channel("b", "ESPN HD"))
-        let question = FeedMerging.questions([pair])[0]
-        #expect(question.name == pair.key)
-        #expect(question.choices.map(\.value) == ["same", "different"])
-    }
 }

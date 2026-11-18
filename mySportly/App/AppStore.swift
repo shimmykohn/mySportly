@@ -97,7 +97,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     @ObservationIgnored private var organizationRevision = -1
     @ObservationIgnored private var organizationUsesCachedAI = true
     private var importTask: Task<Bool, Never>?
-    private var organizeTask: Task<Void, Never>?
     /// Feed merges, detected games and clean names (see `AIJobs.swift`).
     var aiResults = AIResults()
     /// What the AI jobs are doing right now, for Settings → OpenAI. Nil when idle.
@@ -928,48 +927,11 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         }
     }
     func waitForOrganization() async { await organizationPreparation?.value }
-    var isOrganizing: Bool { organizeTask != nil }
-    /// Sorts new or changed channel groups into categories with the user's
-    /// OpenAI key, quietly, up to 400 groups per request. Only the preferred
-    /// audience is sent. Unchanged groups are never resent; results are saved
-    /// as `taxonomy.placement.*` and sync like other personal choices.
-    func organizeInBackground() {
-        runAIJobs()
-        guard organizeTask == nil, catalogReady, !demo, let model = openAI.groupModel(), let groups = directory?.nameGroups else { return }
-        let audience = organizationAudience
-        let pending = groups.pending(in: audience).filter { group in
-            let saved: GroupPlacement? = personal.value("taxonomy.placement.\(group.id)", default: nil)
-            return saved?.isReusable(for: group) != true
-        }
-        guard !pending.isEmpty else { return }
-        let taxonomy = personal.has("preferences.organizationPaths") ? GroupTaxonomy(paths: organizationPaths) : groups.taxonomy
-        organizeTask = Task { [weak self] in
-            defer { self?.organizeTask = nil }
-            do {
-                for start in stride(from: 0, to: pending.count, by: Decisions.maxQuestions) {
-                    let batch = Array(pending[start..<min(start + Decisions.maxQuestions, pending.count)])
-                    let result = try await GroupOrganizationPipeline.classify(batch, taxonomy: taxonomy, model: model)
-                    guard let self else { return }
-                    try Task.checkCancellation()
-                    await self.waitForCatalog()
-                    var updates: [String: Data?] = [:]
-                    for placement in result {
-                        // A changed group or a manual correction made meanwhile wins.
-                        guard let current = self.directory?.nameGroups.byID[placement.id], current.fingerprint == placement.fingerprint else { continue }
-                        let key = "taxonomy.placement.\(placement.id)"
-                        let existing: GroupPlacement? = self.personal.value(key, default: nil)
-                        if existing?.isReusable(for: current) == true { continue }
-                        updates[key] = try JSONEncoder().encode(placement)
-                    }
-                    if !updates.isEmpty { try self.personal.write(updates); self.rebuild() }
-                }
-                self?.openAI.succeeded()
-            } catch {
-                self?.openAI.report(error)
-            }
-        }
-    }
-    func waitForGroupOrganization() async { await organizeTask?.value }
+    /// Sorts, names and links the lineup with the user's OpenAI key, quietly.
+    /// Only the preferred audience is sent and unchanged groups are never
+    /// resent; placements are saved as `taxonomy.placement.*` and sync like
+    /// other personal choices. See `runAIJobs`.
+    func organizeInBackground() { runAIJobs() }
     func setGroupPath(_ group: CatalogNameGroup, path: [String]) {
         guard !path.isEmpty, path.count <= 4, path.allSatisfy(GroupNames.validLabel) else {
             inform("Check the category name", "Use up to four short category names, separated by /. Each name can contain letters, numbers, spaces, an apostrophe, an ampersand, or a hyphen."); return
@@ -984,7 +946,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         } catch { inform("Correction could not be saved", safeError(error)) }
     }
     func retryGroup(_ group: CatalogNameGroup) { remove("taxonomy.placement.\(group.id)") }
-    func cancelOrganization() { organizeTask?.cancel() }
     func applySuggestions(_ selected: [ChannelSuggestion], includeVariants: Bool) {
         do {
             var changes: [String: Data?] = [:]

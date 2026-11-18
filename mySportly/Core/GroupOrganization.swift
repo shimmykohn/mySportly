@@ -21,7 +21,7 @@ public struct CatalogNameGroup: Identifiable, Sendable {
 
 public enum GroupPlacementStatus: String, Codable, Sendable { case classified, needsReview, needsName }
 public struct GroupPlacement: Codable, Identifiable, Sendable {
-    public static let currentDecisionVersion = 4
+    public static let currentDecisionVersion = 5
     public let id: String
     public let fingerprint: String
     public var path: [String]

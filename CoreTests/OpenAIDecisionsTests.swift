@@ -38,14 +38,4 @@ struct OpenAIDecisionsTests {
         #expect(throws: DecisionsFailure.self) { try DecisionsClient.decode(Data(badSum.utf8), for: request) }
         #expect(throws: DecisionsFailure.self) { try DecisionsClient.decode(Data(wrongName.utf8), for: request) }
     }
-
-    @Test func groupQuestionsRejectTooManyChoices() throws {
-        let source = UUID()
-        let channels = ["Golf 01", "Golf 02"].enumerated().map { Channel(id: "c\($0.offset)", sourceID: source, name: $0.element, group: "Sports", language: "en", region: "US") }
-        var resolver = ChannelMetadataResolver()
-        let metadata = Dictionary(uniqueKeysWithValues: channels.map { ($0.id, resolver.resolve($0)) })
-        let group = try #require(try CatalogGroupIndex(channels: channels, metadata: metadata, placements: [:]).groups.first)
-        let choices = GroupTaxonomy(paths: (0..<254).map { ["Category \($0)"] }).children(of: [])
-        #expect(throws: GroupDecisionFailure.self) { try OpenAIGroupModel.questions([GroupDecisionInput(group: group, parent: [], choices: choices)]) }
-    }
 }

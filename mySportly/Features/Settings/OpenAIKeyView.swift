@@ -26,7 +26,7 @@ struct OpenAIKeyView: View {
                 .disabled(key.isEmpty)
                 if let error { Text(error).foregroundStyle(.red) }
             } footer: {
-                Text("Stored only in this device’s Keychain. Used to sort channel groups, combine duplicate feeds, find games in the guide, tidy channel names and understand searches the app can’t match on its own.")
+                Text("Stored only in this device’s Keychain. Used to organize your channels, combine duplicate feeds and tidy channel, movie and show names with GPT-6 Luna, find games in the guide, and understand searches the app can’t match on its own. Only channel names in your regions and languages are sent, never stream addresses.")
             }
             if openAI.configured {
                 Section { Button("Remove Key", role: .destructive) { try? openAI.remove() } }

@@ -24,7 +24,18 @@ public struct AIResults: Codable, Equatable, Sendable {
     public var vodNamesAsked: Set<String>?
     /// When the last run finished (seconds since 1970). Nil before the first run.
     public var lastRun: Double?
+    /// The `CatalogPass.version` the names were last asked with. Nil: an
+    /// earlier model, so everything is asked again once.
+    public var passVersion: Int?
     public init() {}
+
+    /// Forgets which names were asked under an older pass, keeping its
+    /// answers on screen until the new ones arrive.
+    public mutating func startPass(_ version: Int) {
+        guard passVersion != version else { return }
+        namesAsked = []; vodNamesAsked = []
+        passVersion = version
+    }
 
     /// What the jobs found, for Settings → OpenAI.
     public var summary: AIActivitySummary {

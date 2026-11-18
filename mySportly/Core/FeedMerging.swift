@@ -13,11 +13,9 @@ public struct MergeCandidate: Hashable, Sendable {
 
 /// Duplicate feeds (HD/4K/backup copies) shown as one channel with alternate
 /// streams. Strict local groups apply without a model; looser candidates are
-/// confirmed one pair at a time with the Decisions API.
+/// confirmed by the catalog pass (`CatalogPass.mergeAnswers`).
 public enum FeedMerging {
     public static let maxGroup = 12
-    static let input = "Decide whether two entries from one IPTV provider's playlist are the same television channel (for example HD, 4K or backup copies of one feed). Regional variants (East/West), different numbered channels (ESPN vs ESPN 2), time-shifted (+1) feeds and different events are different channels."
-
     /// Lowercased words of the locally cleaned name; quality, region prefix
     /// and backup markers removed, numbers and qualifiers kept.
     public static func base(_ name: String) -> String {
@@ -30,6 +28,12 @@ public enum FeedMerging {
         channel.region.isEmpty ? (NameCleaning.regionPrefix(channel.name) ?? "") : channel.region.uppercased()
     }
 
+    /// Channels that may be copies of one another share this: same source,
+    /// region and base name. Empty-named channels end in "|" and never pair.
+    public static func looseKey(_ channel: Channel) -> String {
+        [channel.sourceID.uuidString, region(channel), base(channel.name)].joined(separator: "|")
+    }
+
     /// Strict groups: same source, guide ID, quality-stripped name, language and region.
     public static func strictGroups(_ channels: [Channel]) -> [[String]] { ChannelOrganizer.variantGroups(channels) }
 
@@ -38,9 +42,7 @@ public enum FeedMerging {
     public static func candidates(_ channels: [Channel], strict: [[String]]) -> [MergeCandidate] {
         var component: [String: Int] = [:]
         for (index, group) in strict.enumerated() { for id in group { component[id] = index } }
-        let loose = Dictionary(grouping: channels.filter { !ListingAvailability.isInactiveChannel($0.name) }) { channel in
-            [channel.sourceID.uuidString, region(channel), base(channel.name)].joined(separator: "|")
-        }
+        let loose = Dictionary(grouping: channels.filter { !ListingAvailability.isInactiveChannel($0.name) }, by: looseKey)
         var result: [MergeCandidate] = []
         for (key, members) in loose where members.count > 1 && members.count <= maxGroup && !key.hasSuffix("|") {
             // One representative per strict component; singletons are their own.
@@ -53,25 +55,6 @@ public enum FeedMerging {
             for other in representatives.dropFirst() { result.append(MergeCandidate(anchor: anchor, other: other)) }
         }
         return result.sorted { $0.key < $1.key }
-    }
-
-    public static func questions(_ candidates: [MergeCandidate]) -> [DecisionQuestion] {
-        func describe(_ channel: Channel) -> DecisionJSON {
-            .object(["name": .string(channel.name), "group": .string(channel.group), "guide_id": .string(channel.guideID),
-                     "region": .string(channel.region), "language": .string(channel.language)])
-        }
-        return candidates.map { candidate in
-            DecisionQuestion(name: candidate.key, instructions: [
-                .text("Are these two playlist entries the same channel?"),
-                .json(.object(["first": describe(candidate.anchor), "second": describe(candidate.other)])),
-            ], choices: [
-                DecisionChoice(value: "same", description: "The same channel; only quality, backup or source copy differs."),
-                DecisionChoice(value: "different", description: "Different channels, regions, numbers, time shifts or events."),
-            ])
-        }
-    }
-    public static func accepted(_ answer: DecisionAnswer) -> Bool {
-        answer.choice == "same" && answer.confidence >= 0.70 && answer.probability >= 0.80
     }
 
     /// Strict groups joined by every confirmed pair whose channels still exist.
