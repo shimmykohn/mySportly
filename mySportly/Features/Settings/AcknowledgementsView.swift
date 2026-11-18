@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// The open-source software that plays MKV and other files, with the
-/// licence texts and source links its licences ask the app to carry.
+/// licence texts and source links its licences ask the app to carry, and
+/// TMDB's attribution.
 struct AcknowledgementsView: View {
     private struct Component: Identifiable {
         let name: String, licence: String, source: String, files: [String]
@@ -47,6 +48,16 @@ struct AcknowledgementsView: View {
                 }
             } footer: {
                 Text("mySportly plays MKV and other files with AetherEngine and FFmpeg. FFmpeg and its companion libraries are included as separate, replaceable frameworks under the LGPL.")
+            }
+            // TMDB asks apps that use its API to show this notice.
+            Section {
+                Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
+                    .accessibilityIdentifier("tmdb-attribution")
+                if let site = URL(string: "https://www.themoviedb.org") { Link("themoviedb.org", destination: site) }
+            } header: {
+                Text("The Movie Database (TMDB)")
+            } footer: {
+                Text("With your own token (Settings → TMDB), movie and show pages show TMDB’s artwork, ratings, cast, trailers and recommendations.")
             }
         }
         .navigationTitle("Acknowledgements")

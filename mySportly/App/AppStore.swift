@@ -34,6 +34,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     /// Saved progress decoded once per personal-data revision.
     @ObservationIgnored var savedProgressCache: (revision: Int, items: [String: WatchProgress]) = (-1, [:])
     let openAI = OpenAIService()
+    /// Artwork and details for movies and shows, with the user's token.
+    let tmdb = TMDBService()
     let sportsData = SportsDataStore()
     private(set) var gameLinks: [String: [SportsFeedLink]] = [:]
     /// Home's games; restored from the launch snapshot, replaced by guide matching.

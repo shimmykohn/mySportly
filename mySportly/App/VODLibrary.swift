@@ -30,6 +30,8 @@ import Observation
     private(set) var versions: [String: [String]] = [:]
     @ObservationIgnored private var hiddenCopies: [String: Movie] = [:]
     @ObservationIgnored private var hiddenShows: [String: Series] = [:]
+    /// Built the first time TMDB's titles are looked for, once per revision.
+    @ObservationIgnored private var tmdbIndex: (revision: Int, movies: TMDBLibraryIndex<Movie>, shows: TMDBLibraryIndex<Series>)?
 
     var hasContent: Bool { !movies.isEmpty || !series.isEmpty }
 
@@ -138,5 +140,27 @@ import Observation
               let detail = try? await provider.seriesDetail(show, secrets: secrets) else { return nil }
         seriesDetails[show.id] = detail
         return detail
+    }
+
+    // MARK: TMDB's titles in the library
+
+    /// TMDB's recommendations or a collection's parts that are in the library,
+    /// in TMDB's order. `known` holds TMDB ids matched before, by item ID.
+    func movies(matching references: [TMDBReference], known: [String: Int], excluding: Set<String>) async -> [Movie] {
+        guard !references.isEmpty else { return [] }
+        return await index().movies.matches(references, known: known, excluding: excluding)
+    }
+
+    func shows(matching references: [TMDBReference], known: [String: Int], excluding: Set<String>) async -> [Series] {
+        guard !references.isEmpty else { return [] }
+        return await index().shows.matches(references, known: known, excluding: excluding)
+    }
+
+    private func index() async -> (movies: TMDBLibraryIndex<Movie>, shows: TMDBLibraryIndex<Series>) {
+        if let tmdbIndex, tmdbIndex.revision == revision { return (tmdbIndex.movies, tmdbIndex.shows) }
+        let movies = movies, series = series, revision = revision
+        let built = await Task.detached(priority: .userInitiated) { (movies: TMDBLibraryIndex(movies), shows: TMDBLibraryIndex(series)) }.value
+        tmdbIndex = (revision, built.movies, built.shows)
+        return built
     }
 }

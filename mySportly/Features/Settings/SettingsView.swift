@@ -16,7 +16,10 @@ struct SettingsView: View {
                 if store.personal.syncChangeNeedsRelaunch { Label("Takes effect the next time you open the app.", systemImage: "info.circle").font(.footnote) }
                 Text(store.personal.cloudStatus).foregroundStyle(.secondary)
             }
-            Section { NavigationLink { OpenAIKeyView() } label: { Label("OpenAI", systemImage: "sparkles") }.accessibilityIdentifier("openai-settings") }
+            Section {
+                NavigationLink { OpenAIKeyView() } label: { Label("OpenAI", systemImage: "sparkles") }.accessibilityIdentifier("openai-settings")
+                NavigationLink { TMDBKeyView() } label: { Label("TMDB", systemImage: "film") }.accessibilityIdentifier("tmdb-settings")
+            }
             Section { NavigationLink { AcknowledgementsView() } label: { Label("Acknowledgements", systemImage: "doc.text") } }
         }
         .navigationTitle("Settings")

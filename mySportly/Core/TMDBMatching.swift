@@ -30,7 +30,9 @@ public enum TMDBMatch {
     /// For comparing titles: lowercase, without accents, apostrophes,
     /// punctuation or a leading article, with "&" read as "and".
     public static func normalized(_ title: String) -> String {
-        let folded = title.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+        // Folding only changes non-ASCII text, and is the slow part on a large library.
+        let folded = (title.utf8.allSatisfy { $0 < 128 } ? title.lowercased()
+                      : title.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX")))
             .replacingOccurrences(of: "&", with: " and ")
             .replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "’", with: "")
         var words = folded.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
@@ -111,18 +113,21 @@ extension TMDBCollection {
 }
 
 /// The library by TMDB id and by title, to show TMDB's recommendations and a
-/// collection's parts that are actually in it.
+/// collection's parts that are actually in it. Holds positions in `items`
+/// (which shares the library's storage), not copies.
 public struct TMDBLibraryIndex<Item: VODItem>: Sendable {
-    private var byTMDB: [Int: Item] = [:]
-    private var byTitle: [String: [Item]] = [:]
-    private var byID: [String: Item] = [:]
+    private let items: [Item]
+    private var byTMDB: [Int: Int] = [:]
+    private var byTitle: [String: [Int]] = [:]
+    private var byID: [String: Int] = [:]
 
     public init(_ items: [Item]) {
-        for item in items {
-            byID[item.id] = item
-            if let id = item.tmdbID, byTMDB[id] == nil { byTMDB[id] = item }
+        self.items = items
+        for (position, item) in items.enumerated() {
+            if byID[item.id] == nil { byID[item.id] = position }
+            if let id = item.tmdbID, byTMDB[id] == nil { byTMDB[id] = position }
             let name = TMDBMatch.normalized(item.title)
-            if !name.isEmpty { byTitle[name, default: []].append(item) }
+            if !name.isEmpty { byTitle[name, default: []].append(position) }
         }
     }
 
@@ -131,25 +136,27 @@ public struct TMDBLibraryIndex<Item: VODItem>: Sendable {
     /// ID), else by title within a year. Titles known to be something else
     /// aren't matched by name.
     public func matches(_ references: [TMDBReference], known: [String: Int] = [:], excluding: Set<String> = []) -> [Item] {
-        var knownItems: [Int: Item] = [:]
-        for (itemID, tmdbID) in known.sorted(by: { $0.key < $1.key }) where knownItems[tmdbID] == nil {
-            if let item = byID[itemID] { knownItems[tmdbID] = item }
+        var knownPositions: [Int: Int] = [:]
+        for (itemID, tmdbID) in known.sorted(by: { $0.key < $1.key }) where knownPositions[tmdbID] == nil {
+            if let position = byID[itemID] { knownPositions[tmdbID] = position }
         }
         var seen = excluding, found: [Item] = []
         for reference in references {
-            guard let item = byTMDB[reference.id] ?? knownItems[reference.id] ?? named(reference, known: known),
-                  seen.insert(item.id).inserted else { continue }
-            found.append(item)
+            guard let position = byTMDB[reference.id] ?? knownPositions[reference.id] ?? named(reference, known: known),
+                  seen.insert(items[position].id).inserted else { continue }
+            found.append(items[position])
         }
         return found
     }
 
-    private func named(_ reference: TMDBReference, known: [String: Int]) -> Item? {
+    private func named(_ reference: TMDBReference, known: [String: Int]) -> Int? {
         var tried = Set<String>()
         for name in [reference.title, reference.originalTitle].map(TMDBMatch.normalized) where !name.isEmpty && tried.insert(name).inserted {
-            if let item = byTitle[name]?.first(where: { ($0.tmdbID ?? known[$0.id]) == nil && TMDBMatch.yearsAgree($0.year, reference.year) }) {
-                return item
+            let match = byTitle[name]?.first { position in
+                let item = items[position]
+                return (item.tmdbID ?? known[item.id]) == nil && TMDBMatch.yearsAgree(item.year, reference.year)
             }
+            if let match { return match }
         }
         return nil
     }

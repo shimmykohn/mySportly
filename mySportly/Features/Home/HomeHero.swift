@@ -173,11 +173,17 @@ struct HeroCard<Art: View, Details: View, Actions: View>: View {
 }
 
 /// A movie or episode in progress: its artwork across the page, and Resume.
+/// With TMDB, its best backdrop and title logo, held still.
 struct HeroContinuePage: View {
     @Environment(AppStore.self) private var store
     let item: WatchProgress
+    /// TMDB's details, for the item they were found for.
+    @State private var art: (itemID: String, title: TMDBTitle?)?
+
+    private struct ArtKey: Hashable { let itemID: String; let library: Int; let enabled: Bool }
 
     var body: some View {
+        let tmdb = art?.itemID == item.itemID ? art?.title : nil
         HeroCard {
             // The artwork itself fills the page, up under the bars.
             Color.clear
@@ -187,10 +193,19 @@ struct HeroContinuePage: View {
                         else { LinearGradient(colors: [.indigo.opacity(0.6), .secondary.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing) }
                     }
                 }
+                .overlay(alignment: .top) {
+                    if let backdrop = tmdb?.backdropURLs.first {
+                        AsyncImage(url: backdrop, transaction: Transaction(animation: .easeOut(duration: 0.4))) { phase in
+                            if let image = phase.image { image.resizable().scaledToFill().transition(.opacity) }
+                        }
+                    }
+                }
                 .clipped()
         } details: {
             Label("Continue Watching", systemImage: "play.circle.fill").font(.caption.weight(.semibold)).opacity(0.9)
-            Text(item.title).font(.title3.bold()).lineLimit(2)
+            TitleLogo(url: tmdb?.logoURL, title: item.title, maxWidth: 220, maxHeight: 64) {
+                Text(item.title).font(.title3.bold()).lineLimit(2)
+            }
             if !item.subtitle.isEmpty { Text(item.subtitle).font(.subheadline).opacity(0.85).lineLimit(1) }
             HStack(spacing: 8) {
                 ProgressView(value: item.fraction).tint(.white).frame(maxWidth: 140)
@@ -208,5 +223,11 @@ struct HeroContinuePage: View {
                 .buttonStyle(.glass)
         }
         .accessibilityIdentifier("home-continue")
+        // Again once the library loads, which can match a title never opened with TMDB on.
+        .task(id: ArtKey(itemID: item.itemID, library: store.vod.revision, enabled: store.tmdbEnabled)) {
+            let found = await store.tmdbTitle(continuing: item)
+            guard !Task.isCancelled else { return }
+            art = (item.itemID, found)
+        }
     }
 }
