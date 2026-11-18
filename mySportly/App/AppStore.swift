@@ -743,10 +743,12 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     /// Plays a movie or episode from `startAt` (nil: the beginning).
     func playVOD(_ item: WatchProgress, startAt: Double?, upNext: VODUpNext? = nil) {
         do {
-            guard demo || sources.contains(where: { $0.id == item.sourceID }) else { throw CatalogError.rejected }
-            let url = demo ? SampleVOD.streamURL
-                : try provider.vodURL(kind: item.kind, providerID: item.providerID, container: VODFormat.requested(item.container),
-                                      secrets: KeychainStore.credentials(item.sourceID) ?? SourceSecrets())
+            // A downloaded copy plays from this device, even offline.
+            let saved = Downloads.shared.file(for: item.itemID)
+            guard saved != nil || demo || sources.contains(where: { $0.id == item.sourceID }) else { throw CatalogError.rejected }
+            let url = try saved ?? (demo ? SampleVOD.streamURL
+                : provider.vodURL(kind: item.kind, providerID: item.providerID, container: VODFormat.requested(item.container),
+                                  secrets: KeychainStore.credentials(item.sourceID) ?? SourceSecrets()))
             if watchingTwo { stopSecond() }
             let channel = Channel(id: item.itemID, sourceID: item.sourceID, name: item.title, logo: item.artwork)
             playback.play(channel, url: url, title: item.title, preferredLanguage: personal.value("preferences.audioLanguage", default: languages.first ?? "en"),

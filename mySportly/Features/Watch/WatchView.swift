@@ -95,6 +95,12 @@ struct WatchView: View {
     }
 
     @ViewBuilder private func shelves(_ library: VODLibrary) -> some View {
+        let saved = Downloads.shared.list(shelf == .movies ? .movie : .episode)
+        if !saved.isEmpty {
+            HomeRow(title: "Downloads", identifier: "watch-downloads") {
+                ForEach(saved) { DownloadCard(record: $0) }
+            }
+        }
         let continuing = store.continueWatching.filter { shelf == .movies ? $0.kind == .movie : $0.kind == .episode }
         if !continuing.isEmpty {
             HomeRow(title: "Continue Watching", identifier: "watch-continue") {
@@ -124,7 +130,8 @@ struct WatchView: View {
 
     @ViewBuilder private var emptyState: some View {
         let library = store.vod
-        if !library.hasContent {
+        // Downloads stay reachable offline, without the catalog.
+        if !library.hasContent && Downloads.shared.records.isEmpty {
             if !store.demo && !store.sources.contains(where: { $0.kind == .xtream }) {
                 ContentUnavailableView {
                     Label("Movies and Shows", systemImage: "play.rectangle.on.rectangle")
@@ -272,6 +279,7 @@ struct MovieMenu: View {
         Button(progress.isFinished ? "Mark as Unwatched" : "Mark as Watched", systemImage: progress.isFinished ? "circle" : "checkmark.circle") {
             store.setWatched(progress, !progress.isFinished)
         }
+        DownloadMenuItems(item: progress)
         ExternalPlayItems(item: progress)
     }
 }
@@ -347,6 +355,7 @@ struct ContinueCard: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button("Mark as Watched", systemImage: "checkmark.circle") { store.setWatched(item, true) }
+            DownloadMenuItems(item: item)
             Button("Remove from Continue Watching", systemImage: "minus.circle", role: .destructive) { store.clearProgress(item) }
         }
         .accessibilityLabel("Resume \(item.title)")

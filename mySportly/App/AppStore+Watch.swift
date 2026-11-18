@@ -100,6 +100,19 @@ extension AppStore {
         return try? provider.vodURL(kind: item.kind, providerID: item.providerID, container: item.container, secrets: secrets)
     }
 
+    /// Saves the provider's file on this device for offline viewing.
+    func download(_ item: WatchProgress) {
+        guard !demo else { inform("Downloads aren’t available in the demo", "Connect your own source to download movies and episodes."); return }
+        guard !["m3u8", "ts"].contains(item.container.lowercased()) else {
+            inform("This title can’t be downloaded", "Your provider sends it as a live stream rather than a file."); return
+        }
+        guard sources.contains(where: { $0.id == item.sourceID }), let secrets = try? KeychainStore.credentials(item.sourceID),
+              let url = try? provider.vodURL(kind: item.kind, providerID: item.providerID, container: item.container, secrets: secrets) else {
+            inform("Download unavailable", "This title’s source isn’t available on this iPhone."); return
+        }
+        Downloads.shared.start(item, url: url)
+    }
+
     /// "Remove from Continue Watching".
     func clearProgress(_ item: WatchProgress) { try? personal.remove(WatchProgress.key(item.itemID)) }
 }

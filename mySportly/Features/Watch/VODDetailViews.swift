@@ -104,8 +104,11 @@ private struct EpisodeRow: View {
                     if let duration = episode.duration { Text(duration.watchDuration).font(.caption2).foregroundStyle(.secondary) }
                 }
                 Spacer(minLength: 0)
-                if progress.isFinished {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint).accessibilityLabel("Watched")
+                VStack(spacing: 8) {
+                    if progress.isFinished {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint).accessibilityLabel("Watched")
+                    }
+                    DownloadBadge(itemID: episode.id)
                 }
             }
             .padding(.vertical, 10)
@@ -119,6 +122,7 @@ private struct EpisodeRow: View {
             Button(progress.isFinished ? "Mark as Unwatched" : "Mark as Watched", systemImage: progress.isFinished ? "circle" : "checkmark.circle") {
                 store.setWatched(progress, !progress.isFinished)
             }
+            DownloadMenuItems(item: progress)
             ExternalPlayItems(item: progress)
         }
         .accessibilityIdentifier("episode-\(episode.id)")
@@ -162,8 +166,8 @@ private struct VODHero: View {
     }
 }
 
-/// Play (or Resume, with the time left) and the watched mark on one line.
-/// Once watched, Play shrinks to its icon and the mark reads "Watched".
+/// Play (or Resume, with the time left), the watched mark and Download on
+/// one line. Once watched, Play shrinks to its icon and the mark reads "Watched".
 /// Long-press Play to start over or play in Infuse or VLC.
 private struct PlayRow: View {
     @Environment(AppStore.self) private var store
@@ -186,6 +190,7 @@ private struct PlayRow: View {
                 .buttonStyle(.glass)
                 .accessibilityHint("Marks it as unwatched")
                 .accessibilityIdentifier("vod-watched")
+                DownloadButton(item: progress)
             } else {
                 let resuming = progress.resumePosition != nil
                 Button(action: play) {
@@ -207,6 +212,7 @@ private struct PlayRow: View {
                     .labelStyle(.iconOnly)
                     .buttonStyle(.glass).buttonBorderShape(.circle)
                     .accessibilityIdentifier("vod-watched")
+                DownloadButton(item: progress)
             }
         }
         .font(.headline)

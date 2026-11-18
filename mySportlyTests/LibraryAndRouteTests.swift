@@ -23,7 +23,7 @@ import Testing
         store.route(AppRouteInbox.url("search", name: "query", value: "News & Sports / today"))
         #expect(store.selectedTab == .search)
         #expect(store.searchRequest == "News & Sports / today")
-        #expect(!store.isOrganizing)
+        #expect(store.aiJobsTask == nil)
         store.route(URL(string: "mysportly://guide")!)
         #expect(store.selectedTab == .home && store.homeDestination == .guide)
         store.route(AppRouteInbox.url("library", name: "id", value: "removed"))
