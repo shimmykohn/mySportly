@@ -21,6 +21,8 @@ public struct AIResults: Codable, Equatable, Sendable {
     /// Movie and show titles: raw → model-cleaned, and those already sent.
     /// Optional so files saved before movies and shows still decode.
     public var vodNames: [String: String]?
+    /// Raw channel name → the numbered set it belongs to ("NFL" for "NFL 07").
+    public var families: [String: String]?
     public var vodNamesAsked: Set<String>?
     /// When the last run finished (seconds since 1970). Nil before the first run.
     public var lastRun: Double?
@@ -56,6 +58,7 @@ public struct AIResults: Codable, Equatable, Sendable {
         merges = merges.filter { pairs.contains($0.key) }
         let raw = Set(channels.map(\.name))
         names = names.filter { raw.contains($0.key) }
+        families = families?.filter { raw.contains($0.key) }
         namesAsked = namesAsked.intersection(raw)
     }
 

@@ -66,6 +66,8 @@ extension AppStore {
                         for row in chunks[index] {
                             guard let answer = answers[row.key] else { continue }
                             results.namesAsked.insert(row.name)
+                            if results.families == nil { results.families = [:] }
+                            results.families?[row.name] = answer.family
                             // A name in several folders keeps its first answer.
                             if let name = answer.name, named.insert(row.name).inserted {
                                 if name != NameCleaning.local(row.name), results.names[row.name] != name { tidied += 1 }

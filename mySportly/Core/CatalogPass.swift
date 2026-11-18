@@ -12,7 +12,7 @@ public enum CatalogPass {
     public static let endpoint = URL(string: "https://api.openai.com/v1/responses")!
     public static let model = "gpt-6-luna"
     /// Bumped when the prompt changes enough that earlier answers should be redone.
-    public static let version = 1
+    public static let version = 2
     public static let chunkSize = 500
     public static let parallel = 4
     static let maxOutputTokens = 32_000
@@ -27,6 +27,9 @@ public enum CatalogPass {
     category: the number of the most specific listed category that fits the channel, or 0 when none fits. \
     same: the number of another line that is the same channel, where only quality, backup or source copy differs; otherwise null. \
     Regional variants, different numbered channels, time-shifted feeds and different events are different channels. \
+    family: when the channel is one of a numbered set of event or overflow channels that only differ by their number \
+    (NFL 01, NFL 02, PPV 1, PPV 2), the set's short name using words from the name ("NFL", "PPV"); otherwise null. \
+    Distinct networks that happen to be numbered (ESPN 2, Sky Sports 1) are not a set. \
     Return every line exactly once.
     """
     static let titleInstructions = """
@@ -61,6 +64,7 @@ public enum CatalogPass {
         if kind == .channels {
             item["category"] = ["type": "integer"]
             item["same"] = ["type": ["integer", "null"]]
+            item["family"] = ["type": ["string", "null"]]
         }
         let schema: [String: Any] = [
             "type": "object", "additionalProperties": false, "required": ["rows"],
@@ -90,7 +94,7 @@ public enum CatalogPass {
         struct Content: Decodable { let type: String; let text: String? }
         struct Item: Decodable { let type: String; let content: [Content]? }
         struct Response: Decodable { let status: String?; let output: [Item] }
-        struct Entry: Decodable { let n: Int; let name: String; let category: Int?; let same: Int? }
+        struct Entry: Decodable { let n: Int; let name: String; let category: Int?; let same: Int?; let family: String? }
         struct Payload: Decodable { let rows: [Entry] }
         guard data.count <= 8 * 1024 * 1024, let response = try? JSONDecoder().decode(Response.self, from: data) else { throw DecisionsFailure.invalidResponse }
         let contents = response.output.filter { $0.type == "message" }.flatMap { $0.content ?? [] }
@@ -106,6 +110,7 @@ public enum CatalogPass {
             if kind == .channels {
                 if let category = entry.category, (0...categoryCount).contains(category) { answer.category = category }
                 if let same = entry.same, same != entry.n, rows.indices.contains(same - 1) { answer.same = rows[same - 1].key }
+                if let family = entry.family, !family.contains(where: \.isNumber) { answer.family = NameCleaning.validate(raw: row.name, proposed: family) }
             }
             result[row.key] = answer
         }
@@ -180,8 +185,10 @@ public struct PassAnswer: Equatable, Sendable {
     public var category: Int?
     /// The key of the row this one is a copy of.
     public var same: String?
-    public init(name: String? = nil, category: Int? = nil, same: String? = nil) {
-        self.name = name; self.category = category; self.same = same
+    /// The name of the numbered set this channel belongs to ("NFL" for "NFL 07").
+    public var family: String?
+    public init(name: String? = nil, category: Int? = nil, same: String? = nil, family: String? = nil) {
+        self.name = name; self.category = category; self.same = same; self.family = family
     }
 }
 

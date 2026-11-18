@@ -55,7 +55,12 @@ struct SearchScreen: View {
                 }
                 if !groups.channels.isEmpty {
                     Section("Channels") {
-                        ForEach(groups.channels.prefix(limit)) { SearchResultRow(match: $0) }
+                        ForEach(store.collapseFamilies(Array(groups.channels.prefix(limit))) { $0.channel }) { entry in
+                            switch entry {
+                            case .single(let match): SearchResultRow(match: match)
+                            case .family(let name, let matches): ChannelFamilyRow(name: name, channels: matches.map(\.channel))
+                            }
+                        }
                         if groups.channels.count > limit { Button("Show More") { limit += 50 } }
                     }
                     .accessibilityIdentifier("search-channels")

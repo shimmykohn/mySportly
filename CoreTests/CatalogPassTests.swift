@@ -156,3 +156,33 @@ import Testing
         #expect(examples.first?.after == "beIN Sports 1")
     }
 }
+
+@Suite struct ChannelFamilyTests {
+    private let source = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+    private func channel(_ id: String, _ name: String) -> Channel { Channel(id: id, sourceID: source, name: name) }
+
+    @Test func familiesComeBackCheckedAgainstTheName() throws {
+        let rows = [PassRow(key: "a", name: "NFL 07: Cowboys vs Packers"), PassRow(key: "b", name: "ESPN 2"), PassRow(key: "c", name: "PPV 3")]
+        let text = #"{"rows":[{"n":1,"name":"NFL 07: Cowboys vs Packers","category":1,"same":null,"family":"NFL"},"#
+            + #"{"n":2,"name":"ESPN 2","category":1,"same":null,"family":null},"#
+            + #"{"n":3,"name":"PPV 3","category":1,"same":null,"family":"Pay Per View"}]}"#
+        let body: [String: Any] = ["status": "completed", "output": [["type": "message", "content": [["type": "output_text", "text": text]]]]]
+        let answers = try CatalogPass.decode(JSONSerialization.data(withJSONObject: body), .channels, rows: rows, categoryCount: 1)
+        #expect(answers["a"]?.family == "NFL")
+        #expect(answers["b"]?.family == nil)
+        // Words that aren't in the name are rejected.
+        #expect(answers["c"]?.family == nil)
+    }
+
+    @Test func numberedSetsFoldIntoOneEntryInNumberOrder() {
+        let items = [channel("1", "NFL 10"), channel("2", "CNN"), channel("3", "NFL 02"), channel("4", "PPV 1"), channel("5", "NFL 01")]
+        let families = ["NFL 10": "NFL", "NFL 02": "NFL", "NFL 01": "NFL", "PPV 1": "PPV"]
+        let entries = ChannelFamilies.collapse(items, channel: { $0 }) { families[$0.name] }
+        #expect(entries.count == 3)
+        guard case .family(let name, let members) = entries[0] else { Issue.record("Expected the NFL set first"); return }
+        #expect(name == "NFL" && members.map(\.name) == ["NFL 01", "NFL 02", "NFL 10"])
+        guard case .single(let cnn) = entries[1], case .single(let ppv) = entries[2] else { Issue.record("Expected singles"); return }
+        // A set of one stays a plain channel.
+        #expect(cnn.name == "CNN" && ppv.name == "PPV 1")
+    }
+}

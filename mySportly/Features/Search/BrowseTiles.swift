@@ -70,7 +70,12 @@ struct BrowseCategoryView: View {
         List {
             if let channels {
                 if channels.isEmpty { ContentUnavailableView("No \(category) Channels", systemImage: "tv") }
-                ForEach(channels.prefix(limit)) { PlayableChannelRow(channel: $0) }
+                ForEach(store.collapseFamilies(Array(channels.prefix(limit))) { $0 }) { entry in
+                    switch entry {
+                    case .single(let channel): PlayableChannelRow(channel: channel)
+                    case .family(let name, let members): ChannelFamilyRow(name: name, channels: members)
+                    }
+                }
                 if channels.count > limit { Button("Show More") { limit += 100 } }
             } else {
                 ProgressView().frame(maxWidth: .infinity)
