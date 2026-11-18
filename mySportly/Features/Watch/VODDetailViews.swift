@@ -17,6 +17,17 @@ struct MovieDetailView: View {
                 if let plot = detail?.plot.nonEmpty { Text(plot).font(.body) }
                 if let director = detail?.director.nonEmpty { LabeledContent("Director", value: director).font(.subheadline) }
                 if let cast = detail?.cast.nonEmpty { LabeledContent("Cast") { Text(cast).multilineTextAlignment(.trailing) }.font(.subheadline) }
+                let versions = store.vod.versions(of: movie)
+                if !versions.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Other Versions").font(.headline)
+                        ForEach(versions) { version in
+                            Button { store.play(version) } label: { Label(version.rawTitle, systemImage: "play.circle") }
+                                .contextMenu { MovieMenu(movie: version) }
+                        }
+                    }
+                    .accessibilityIdentifier("movie-versions")
+                }
             }
             .padding()
         }
@@ -48,6 +59,16 @@ struct SeriesDetailView: View {
                     }
                 }
                 if !show.plot.isEmpty { Text(show.plot).font(.body) }
+                let versions = store.vod.versions(of: show)
+                if !versions.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Other Versions").font(.headline)
+                        ForEach(versions) { version in
+                            NavigationLink { SeriesDetailView(show: version) } label: { Label(version.rawTitle, systemImage: "rectangle.stack") }
+                        }
+                    }
+                    .accessibilityIdentifier("show-versions")
+                }
                 if let detail, !detail.seasons.isEmpty {
                     let current = detail.seasons.first { $0.number == season } ?? detail.seasons[0]
                     Picker("Season", selection: Binding(get: { current.number }, set: { season = $0 })) {

@@ -116,18 +116,20 @@ public struct DecisionsClient: Sendable {
 
     /// Sends questions in requests of at most 400, retrying rate limits briefly.
     public func answers(input: String, questions: [DecisionQuestion], timeout: TimeInterval = 60) async throws -> [String: DecisionAnswer] {
-        guard !key.isEmpty else { throw DecisionsFailure.credentials }
-        var combined: [String: DecisionAnswer] = [:]
-        for start in stride(from: 0, to: questions.count, by: Decisions.maxQuestions) {
-            let request = DecisionsRequest(input: input, questions: Array(questions[start..<min(start + Decisions.maxQuestions, questions.count)]))
-            combined.merge(try await send(request, timeout: timeout)) { _, newest in newest }
-        }
-        return combined
+        try await answersAndUsage(input: input, questions: questions, timeout: timeout).answers
     }
 
-    func send(_ body: DecisionsRequest, timeout: TimeInterval) async throws -> [String: DecisionAnswer] {
-        let data = try await OpenAIHTTP.post(Decisions.endpoint, key: key, body: JSONEncoder().encode(body), timeout: timeout)
-        return try Self.decode(data, for: body)
+    /// The answers and the tokens the requests used.
+    public func answersAndUsage(input: String, questions: [DecisionQuestion], timeout: TimeInterval = 60) async throws -> (answers: [String: DecisionAnswer], usage: TokenUsage) {
+        guard !key.isEmpty else { throw DecisionsFailure.credentials }
+        var combined: [String: DecisionAnswer] = [:], usage = TokenUsage()
+        for start in stride(from: 0, to: questions.count, by: Decisions.maxQuestions) {
+            let request = DecisionsRequest(input: input, questions: Array(questions[start..<min(start + Decisions.maxQuestions, questions.count)]))
+            let data = try await OpenAIHTTP.post(Decisions.endpoint, key: key, body: JSONEncoder().encode(request), timeout: timeout)
+            usage += TokenUsage.parse(data)
+            combined.merge(try Self.decode(data, for: request)) { _, newest in newest }
+        }
+        return (combined, usage)
     }
 }
 

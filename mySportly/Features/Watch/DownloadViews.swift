@@ -134,3 +134,67 @@ private struct DownloadRing: View {
         .animation(.default, value: fraction)
     }
 }
+
+/// Settings → Downloads: what's saved, the space it takes, and removing it.
+struct DownloadsSettingsView: View {
+    @Environment(AppStore.self) private var store
+    @State private var confirmRemoveAll = false
+
+    var body: some View {
+        let records = Downloads.shared.records.values.sorted { $0.added > $1.added }
+        let used = records.filter { $0.state == .finished }.reduce(Int64(0)) { $0 + $1.received }
+        List {
+            Section {
+                LabeledContent("Space Used", value: used.formatted(.byteCount(style: .file)))
+                    .accessibilityIdentifier("downloads-space")
+            } footer: {
+                Text("Downloads stay on this iPhone, aren’t backed up and play without a connection. One downloads at a time, since your provider counts it as a connection.")
+            }
+            if records.isEmpty {
+                ContentUnavailableView("No Downloads", systemImage: "arrow.down.circle",
+                                       description: Text("Download a movie or episode from its page or its long-press menu."))
+            } else {
+                Section {
+                    ForEach(records) { record in
+                        HStack(spacing: 12) {
+                            Poster(url: record.artwork, title: record.item.title).frame(width: 44)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(record.item.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                if !record.item.subtitle.isEmpty { Text(record.item.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                                Text(status(record)).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .swipeActions {
+                            Button("Remove", systemImage: "trash", role: .destructive) {
+                                if record.state == .downloading { Downloads.shared.cancel(record.id) } else { Downloads.shared.remove(record.id) }
+                            }
+                        }
+                        .contextMenu { DownloadMenuItems(item: record.item) }
+                    }
+                }
+                Section {
+                    Button("Remove All Downloads", role: .destructive) { confirmRemoveAll = true }
+                        .accessibilityIdentifier("downloads-remove-all")
+                }
+            }
+        }
+        .navigationTitle("Downloads")
+        .confirmationDialog("Remove all downloads?", isPresented: $confirmRemoveAll, titleVisibility: .visible) {
+            Button("Remove All Downloads", role: .destructive) {
+                for record in Downloads.shared.records.values {
+                    if record.state == .downloading { Downloads.shared.cancel(record.id) } else { Downloads.shared.remove(record.id) }
+                }
+            }
+        } message: {
+            Text("This deletes \(used.formatted(.byteCount(style: .file))) of movies and episodes from this iPhone. You can download them again.")
+        }
+    }
+
+    private func status(_ record: DownloadRecord) -> String {
+        switch record.state {
+        case .finished: record.received.formatted(.byteCount(style: .file))
+        case .downloading: "Downloading · \(record.fraction.formatted(.percent.precision(.fractionLength(0))))"
+        case .failed: record.problem ?? "Download failed"
+        }
+    }
+}

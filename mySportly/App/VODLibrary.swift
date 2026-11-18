@@ -22,13 +22,26 @@ import Observation
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var movieDetails: [String: MovieDetail] = [:]
     @ObservationIgnored private var seriesDetails: [String: SeriesDetail] = [:]
-    /// AI-tidied titles by raw provider title.
-    @ObservationIgnored private var titles: [String: String] = [:]
+    /// The AI's titles, genres and copies, by raw provider title.
+    @ObservationIgnored private var decisions = VODDecisions()
+    /// Item ID → genre, for the Watch filter.
+    private(set) var genres: [String: String] = [:]
+    /// The other copies (qualities, languages) folded into a movie or show, by its ID.
+    private(set) var versions: [String: [String]] = [:]
+    @ObservationIgnored private var hiddenCopies: [String: Movie] = [:]
+    @ObservationIgnored private var hiddenShows: [String: Series] = [:]
 
     var hasContent: Bool { !movies.isEmpty || !series.isEmpty }
 
-    func movie(_ id: String) -> Movie? { movies.first { $0.id == id } }
-    func show(_ id: String) -> Series? { series.first { $0.id == id } }
+    func movie(_ id: String) -> Movie? { movies.first { $0.id == id } ?? hiddenCopies[id] }
+    func show(_ id: String) -> Series? { series.first { $0.id == id } ?? hiddenShows[id] }
+    /// The other copies of a movie, for "Other Versions".
+    func versions(of movie: Movie) -> [Movie] { (versions[movie.id] ?? []).compactMap { hiddenCopies[$0] } }
+    func versions(of show: Series) -> [Series] { (versions[show.id] ?? []).compactMap { hiddenShows[$0] } }
+    /// Raw titles of folded copies, so the AI keeps answering for them.
+    var versionTitles: (movies: [String], shows: [String]) { (hiddenCopies.values.map(\.rawTitle), hiddenShows.values.map(\.rawTitle)) }
+    /// Genres present, for the filter menu.
+    var genreList: [String] { Array(Set(genres.values)).sorted() }
 
     /// Loads once per launch; `force` refetches every source (pull to refresh).
     func load(sources: [TVSource], provider: ProviderClient, cache: CatalogCache, demo: Bool, force: Bool = false) async {
@@ -75,25 +88,29 @@ import Observation
     }
 
     /// Rows and lists are built off the main actor; catalogs can hold 50,000+ titles.
-    func retitle(_ titles: [String: String]) async {
-        guard titles != self.titles else { return }
-        self.titles = titles
+    func apply(_ decisions: VODDecisions) async {
+        guard decisions != self.decisions else { return }
+        self.decisions = decisions
         if !catalogs.isEmpty { await publish() }
     }
 
     private func publish() async {
-        let catalogs = Array(catalogs.values), titles = titles
+        let catalogs = Array(catalogs.values), decisions = decisions
         let built = await Task.detached(priority: .userInitiated) {
             var movies = catalogs.flatMap(\.movies), series = catalogs.flatMap(\.series)
-            if !titles.isEmpty {
-                for index in movies.indices { if let title = titles[movies[index].rawTitle] { movies[index].title = title } }
-                for index in series.indices { if let title = titles[series[index].rawTitle] { series[index].title = title } }
-            }
+            for index in movies.indices { if let title = decisions.titles[movies[index].rawTitle] { movies[index].title = title } }
+            for index in series.indices { if let title = decisions.titles[series[index].rawTitle] { series[index].title = title } }
+            let (shownMovies, movieCopies, hiddenMovies) = VODCopies.fold(movies, copies: decisions.copies)
+            let (shownSeries, seriesCopies, hiddenSeries) = VODCopies.fold(series, copies: decisions.copies)
+            var genres: [String: String] = [:]
+            for movie in movies { if let genre = decisions.genres[movie.rawTitle] { genres[movie.id] = genre } }
+            for show in series { if let genre = decisions.genres[show.rawTitle] { genres[show.id] = genre } }
             let movieCategories = Dictionary(catalogs.map { ($0.sourceID, $0.movieCategories) }, uniquingKeysWith: { a, _ in a })
             let seriesCategories = Dictionary(catalogs.map { ($0.sourceID, $0.seriesCategories) }, uniquingKeysWith: { a, _ in a })
-            return (movies, series, VODShelf.rows(movies, categories: movieCategories), VODShelf.rows(series, categories: seriesCategories), VODShelf.recentMovies(movies))
+            return (shownMovies, shownSeries, VODShelf.rows(shownMovies, categories: movieCategories), VODShelf.rows(shownSeries, categories: seriesCategories),
+                    VODShelf.recentMovies(shownMovies), genres, movieCopies.merging(seriesCopies) { a, _ in a }, hiddenMovies, hiddenSeries)
         }.value
-        (movies, series, movieRows, seriesRows, recentMovies) = built
+        (movies, series, movieRows, seriesRows, recentMovies, genres, versions, hiddenCopies, hiddenShows) = built
         revision += 1
     }
 

@@ -402,15 +402,19 @@ public struct VODFilter: Hashable, Sendable {
     public var category: String?
     /// The first year of a decade, e.g. 1990.
     public var decade: Int?
+    /// One of `CatalogPass.genres`, from the AI.
+    public var genre: String?
     public var unwatched = false
     public init() {}
     /// Anything other than the plain shelves.
     public var isActive: Bool { self != VODFilter() }
 
-    public func apply<Item: VODItem>(_ rows: [VODShelfRow<Item>], watched: Set<String> = []) -> [Item] {
+    /// `genres` maps item IDs to genres.
+    public func apply<Item: VODItem>(_ rows: [VODShelfRow<Item>], watched: Set<String> = [], genres: [String: String] = [:]) -> [Item] {
         var seen = Set<String>()
         var items = rows.filter { category == nil || $0.title == category }.flatMap(\.items).filter { seen.insert($0.id).inserted }
         if let decade { items = items.filter { $0.year.map { $0 >= decade && $0 < decade + 10 } == true } }
+        if let genre { items = items.filter { genres[$0.id] == genre } }
         if unwatched { items = items.filter { !watched.contains($0.id) } }
         switch sort {
         case .featured: break
@@ -483,3 +487,30 @@ public enum VODFormat {
     /// offer an HLS version of a movie or episode.
     public static func requested(_ container: String) -> String { container.lowercased() }
 }
+
+/// Copies of one movie or show (other qualities, languages) shown once.
+public enum VODCopies {
+    /// The items to show, each shown item's folded copies by ID, and the
+    /// folded items by ID. Copies fold only within one source; the title the
+    /// others point at stands for them, else the first one listed.
+    public static func fold<Item: VODItem & RawTitled>(_ items: [Item], copies: [String: String]) -> (shown: [Item], versions: [String: [String]], hidden: [String: Item]) {
+        guard !copies.isEmpty else { return (items, [:], [:]) }
+        var groups: [String: [Item]] = [:]
+        for item in items { groups[item.sourceID.uuidString + "|" + (copies[item.rawTitle] ?? item.rawTitle), default: []].append(item) }
+        var shownIDs = Set<String>(), versions: [String: [String]] = [:], hidden: [String: Item] = [:]
+        for (key, members) in groups {
+            let root = key.split(separator: "|", maxSplits: 1).last.map(String.init) ?? ""
+            let lead = members.first { $0.rawTitle == root } ?? members[0]
+            shownIDs.insert(lead.id)
+            let others = members.filter { $0.id != lead.id }
+            if !others.isEmpty { versions[lead.id] = others.map(\.id) }
+            for other in others { hidden[other.id] = other }
+        }
+        return (items.filter { shownIDs.contains($0.id) }, versions, hidden)
+    }
+}
+
+/// Items that keep the provider's own title alongside the shown one.
+public protocol RawTitled { var rawTitle: String { get } }
+extension Movie: RawTitled {}
+extension Series: RawTitled {}

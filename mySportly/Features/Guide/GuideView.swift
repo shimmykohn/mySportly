@@ -47,12 +47,22 @@ struct GuideView: View {
                         actions: { Button("Guide Filters") { sheet = .filters } }
                     }
                     Section {
-                        ForEach(visibleChannels) { channel in
-                            NavigationLink { ChannelScheduleView(channel: channel, date: date) } label: {
-                                GuideChannelRow(channel: channel, date: date)
+                        // Numbered sets (NFL 01 … NFL 16) fold into one row.
+                        ForEach(store.collapseFamilies(visibleChannels) { $0 }) { entry in
+                            switch entry {
+                            case .single(let channel): GuideChannelLink(channel: channel, date: date)
+                            case .family(let name, let members):
+                                NavigationLink { GuideFamilyView(name: name, channels: members, date: date) } label: {
+                                    let live = members.filter { store.now(on: $0) != nil }.count
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Label(name, systemImage: "square.stack.3d.up.fill").font(.headline)
+                                        Text(live > 0 ? "\(members.count) channels · \(live) on now" : "\(members.count) channels")
+                                            .font(.subheadline).foregroundStyle(.secondary)
+                                    }
+                                    .accessibilityElement(children: .combine)
+                                }
+                                .accessibilityIdentifier("guide-family-\(name)")
                             }
-                            .accessibilityIdentifier("guide-channel-\(channel.id)")
-                            .contextMenu { ChannelActions(channel: channel) }
                         }
                         moreChannels(total: matchingChannels.count)
                     } header: { guideSummary }
@@ -121,6 +131,30 @@ struct GuideView: View {
     }
     @ViewBuilder private func moreChannels(total: Int) -> some View {
         if total > visibleChannelCount { Button("Show More Channels", systemImage: "plus") { visibleChannelCount += 100 } }
+    }
+}
+
+private struct GuideChannelLink: View {
+    let channel: Channel
+    let date: Date
+    var body: some View {
+        NavigationLink { ChannelScheduleView(channel: channel, date: date) } label: {
+            GuideChannelRow(channel: channel, date: date)
+        }
+        .accessibilityIdentifier("guide-channel-\(channel.id)")
+        .contextMenu { ChannelActions(channel: channel) }
+    }
+}
+
+/// A numbered set's channels, each with what's on.
+private struct GuideFamilyView: View {
+    let name: String
+    let channels: [Channel]
+    let date: Date
+    var body: some View {
+        List(channels) { GuideChannelLink(channel: $0, date: date) }
+            .navigationTitle(name)
+            .toolbarTitleDisplayMode(.inline)
     }
 }
 

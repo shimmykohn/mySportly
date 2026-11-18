@@ -33,11 +33,12 @@ import Testing
         #expect(!raw.contains("provider.example") && !raw.contains("local-key-7"))
     }
 
-    @Test func titleRequestsAskOnlyForNames() throws {
+    @Test func titleRequestsAskForNamesGenresAndCopies() throws {
         let data = try CatalogPass.body(.titles, rows: [PassRow(key: "k", name: "EN - Dune (2021) 4K", context: ["Movie"])])
         let raw = String(decoding: data, as: UTF8.self)
         #expect(raw.contains("1\\tEN - Dune (2021) 4K\\tMovie"))
-        #expect(!raw.contains("category") && !raw.contains("\"same\""))
+        #expect(raw.contains("\"genre\"") && raw.contains("\"Sci-Fi\"") && raw.contains("\"same\""))
+        #expect(!raw.contains("category") && !raw.contains("family"))
     }
 
     @Test func answersMapBackToRowsAndAreChecked() throws {
@@ -184,5 +185,61 @@ import Testing
         guard case .single(let cnn) = entries[1], case .single(let ppv) = entries[2] else { Issue.record("Expected singles"); return }
         // A set of one stays a plain channel.
         #expect(cnn.name == "CNN" && ppv.name == "PPV 1")
+    }
+}
+
+
+@Suite struct TitlePassTests {
+    @Test func genresAreCheckedAgainstTheList() throws {
+        let rows = [PassRow(key: "a", name: "EN - Dune (2021)", context: ["Movie"]), PassRow(key: "b", name: "Arrival", context: ["Movie"])]
+        let text = #"{"rows":[{"n":1,"name":"Dune","same":null,"genre":"Sci-Fi"},{"n":2,"name":"Arrival","same":null,"genre":"Space Opera"}]}"#
+        let body: [String: Any] = ["status": "completed", "output": [["type": "message", "content": [["type": "output_text", "text": text]]]]]
+        let answers = try CatalogPass.decode(JSONSerialization.data(withJSONObject: body), .titles, rows: rows)
+        #expect(answers["a"]?.genre == "Sci-Fi")
+        #expect(answers["b"]?.genre == nil)
+    }
+
+    @Test func copiesNeedTheSameKindAndAgreeingYears() {
+        let rows = [PassRow(key: "EN - Dune (2021)", name: "EN - Dune (2021)", context: ["Movie"]),
+                    PassRow(key: "4K - Dune (2021)", name: "4K - Dune (2021)", context: ["Movie"]),
+                    PassRow(key: "Dune (1984)", name: "Dune (1984)", context: ["Movie"]),
+                    PassRow(key: "Dune", name: "Dune", context: ["Show"])]
+        let answers: [String: PassAnswer] = [
+            "EN - Dune (2021)": PassAnswer(name: "Dune"),
+            "4K - Dune (2021)": PassAnswer(name: "Dune", same: "EN - Dune (2021)"),
+            "Dune (1984)": PassAnswer(name: "Dune", same: "EN - Dune (2021)"),
+            "Dune": PassAnswer(name: "Dune", same: "EN - Dune (2021)"),
+        ]
+        let copies = CatalogPass.titleCopies(rows, answers: answers)
+        // The 4K copy joins; the 1984 film and the show stay apart.
+        #expect(copies == ["EN - Dune (2021)": "4K - Dune (2021)"] || copies == ["4K - Dune (2021)": "EN - Dune (2021)"])
+    }
+
+    @Test func foldedCopiesShowOnceWithTheirVersions() {
+        let source = UUID()
+        let movies = [Movie(id: "1", sourceID: source, providerID: "1", rawTitle: "EN - Dune (2021)", title: "Dune"),
+                      Movie(id: "2", sourceID: source, providerID: "2", rawTitle: "4K - Dune (2021)", title: "Dune"),
+                      Movie(id: "3", sourceID: source, providerID: "3", rawTitle: "Arrival", title: "Arrival")]
+        let (shown, versions, hidden) = VODCopies.fold(movies, copies: ["4K - Dune (2021)": "EN - Dune (2021)"])
+        #expect(shown.map(\.id) == ["1", "3"])
+        #expect(versions == ["1": ["2"]] && hidden["2"]?.rawTitle == "4K - Dune (2021)")
+    }
+
+    @Test func genreFilterUsesTheAIGenres() {
+        let source = UUID()
+        let movies = [Movie(id: "1", sourceID: source, providerID: "1", rawTitle: "Dune", title: "Dune"),
+                      Movie(id: "2", sourceID: source, providerID: "2", rawTitle: "Up", title: "Up")]
+        var filter = VODFilter(); filter.genre = "Animation"
+        let rows = [VODShelfRow(id: "r", title: "All", items: movies)]
+        #expect(filter.apply(rows, genres: ["1": "Sci-Fi", "2": "Animation"]).map(\.id) == ["2"])
+    }
+
+    @Test func usageAddsUpToAnEstimatedCost() throws {
+        let body = #"{"usage":{"input_tokens":1000000,"input_tokens_details":{"cached_tokens":500000},"output_tokens":200000}}"#
+        let usage = TokenUsage.parse(Data(body.utf8)) + TokenUsage(requests: 1)
+        #expect(usage == TokenUsage(input: 1_000_000, cached: 500_000, output: 200_000, requests: 2))
+        // 0.5M fresh × $0.10 + 0.5M cached × $0.01 + 0.2M out × $0.50 = $0.155
+        #expect(abs(usage.dollars - 0.155) < 0.000_001)
+        #expect(0.004.dollarText == "< $0.01")
     }
 }

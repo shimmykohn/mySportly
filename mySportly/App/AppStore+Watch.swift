@@ -8,7 +8,7 @@ struct VODUpNext {
 /// Movies and shows: loading, progress and what to play.
 extension AppStore {
     func loadVOD(force: Bool = false) async {
-        await vod.retitle(aiResults.vodNames ?? [:])
+        await vod.apply(aiResults.vod)
         let hadContent = vod.hasContent
         await vod.load(sources: sources, provider: provider, cache: cache, demo: demo, force: force)
         // New titles get tidied without waiting for the next launch.

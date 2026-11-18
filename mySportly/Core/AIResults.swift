@@ -23,6 +23,15 @@ public struct AIResults: Codable, Equatable, Sendable {
     public var vodNames: [String: String]?
     /// Raw channel name → the numbered set it belongs to ("NFL" for "NFL 07").
     public var families: [String: String]?
+    /// Raw movie or show title → its genre, and → the title that stands for
+    /// its copies (other qualities and languages).
+    public var vodGenres: [String: String]?
+    public var vodCopies: [String: String]?
+    /// The `CatalogPass.titleVersion` titles were last asked with.
+    public var titlePassVersion: Int?
+    /// Tokens and estimated cost on this device: all runs, and the last one.
+    public var usage: TokenUsage?
+    public var lastRunUsage: TokenUsage?
     public var vodNamesAsked: Set<String>?
     /// When the last run finished (seconds since 1970). Nil before the first run.
     public var lastRun: Double?
@@ -33,11 +42,13 @@ public struct AIResults: Codable, Equatable, Sendable {
 
     /// Forgets which names were asked under an older pass, keeping its
     /// answers on screen until the new ones arrive.
-    public mutating func startPass(_ version: Int) {
-        guard passVersion != version else { return }
-        namesAsked = []; vodNamesAsked = []
-        passVersion = version
+    public mutating func startPass(_ version: Int, titles titleVersion: Int = CatalogPass.titleVersion) {
+        if passVersion != version { namesAsked = []; vodNamesAsked = []; passVersion = version }
+        if titlePassVersion != titleVersion { vodNamesAsked = []; titlePassVersion = titleVersion }
     }
+
+    /// What the AI decided for movies and shows, for the Watch catalog.
+    public var vod: VODDecisions { VODDecisions(titles: vodNames ?? [:], genres: vodGenres ?? [:], copies: vodCopies ?? [:]) }
 
     /// What the jobs found, for Settings → OpenAI.
     public var summary: AIActivitySummary {
@@ -67,6 +78,8 @@ public struct AIResults: Codable, Equatable, Sendable {
     public mutating func pruneVOD(rawTitles: Set<String>) {
         guard !rawTitles.isEmpty else { return }
         vodNames = vodNames?.filter { rawTitles.contains($0.key) }
+        vodGenres = vodGenres?.filter { rawTitles.contains($0.key) }
+        vodCopies = vodCopies?.filter { rawTitles.contains($0.key) && rawTitles.contains($0.value) }
         vodNamesAsked = vodNamesAsked?.intersection(rawTitles)
     }
 
@@ -100,4 +113,14 @@ public struct AIActivitySummary: Equatable, Sendable {
     public var feedsCombined: Int, pairsChecked: Int
     public var namesTidied: Int, namesChecked: Int
     public var lastRun: Date?
+}
+
+/// Titles, genres and copies for movies and shows, keyed by raw title.
+public struct VODDecisions: Equatable, Sendable {
+    public var titles: [String: String] = [:]
+    public var genres: [String: String] = [:]
+    public var copies: [String: String] = [:]
+    public init(titles: [String: String] = [:], genres: [String: String] = [:], copies: [String: String] = [:]) {
+        self.titles = titles; self.genres = genres; self.copies = copies
+    }
 }

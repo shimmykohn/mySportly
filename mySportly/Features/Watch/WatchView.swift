@@ -46,11 +46,11 @@ struct WatchView: View {
         .task { await store.loadVOD() }
         .onChange(of: shelf) { _, _ in filter.category = nil; filter.decade = nil }
         .task(id: FilterKey(filter: filter, shelf: shelf, revision: library.revision, watched: watched)) {
-            let filter = filter, movieRows = library.movieRows, seriesRows = library.seriesRows, shelf = shelf
+            let filter = filter, movieRows = library.movieRows, seriesRows = library.seriesRows, shelf = shelf, genres = library.genres
             let result = await Task.detached(priority: .userInitiated) {
                 shelf == .movies
-                    ? (Filtered(movies: filter.isActive ? filter.apply(movieRows, watched: watched) : [], ready: true), VODFilter.decades(movieRows.flatMap(\.items)))
-                    : (Filtered(shows: filter.isActive ? filter.apply(seriesRows, watched: watched) : [], ready: true), VODFilter.decades(seriesRows.flatMap(\.items)))
+                    ? (Filtered(movies: filter.isActive ? filter.apply(movieRows, watched: watched, genres: genres) : [], ready: true), VODFilter.decades(movieRows.flatMap(\.items)))
+                    : (Filtered(shows: filter.isActive ? filter.apply(seriesRows, watched: watched, genres: genres) : [], ready: true), VODFilter.decades(seriesRows.flatMap(\.items)))
             }.value
             guard !Task.isCancelled else { return }
             (filtered, decades) = result
@@ -77,6 +77,13 @@ struct WatchView: View {
                 ForEach((shelf == .movies ? library.movieRows.map(\.title) : library.seriesRows.map(\.title)), id: \.self) { Text($0).tag(Optional($0)) }
             }
             .pickerStyle(.menu)
+            if !library.genreList.isEmpty {
+                Picker("Genre", selection: $filter.genre) {
+                    Text("All Genres").tag(String?.none)
+                    ForEach(library.genreList, id: \.self) { Text($0).tag(Optional($0)) }
+                }
+                .pickerStyle(.menu)
+            }
             if !decades.isEmpty {
                 Picker("Decade", selection: $filter.decade) {
                     Text("Any Year").tag(Int?.none)

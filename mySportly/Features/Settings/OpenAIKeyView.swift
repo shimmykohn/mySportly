@@ -59,6 +59,18 @@ private struct AIActivitySection: View {
             row("Games Found", summary.gamesFound, checked: summary.listingsChecked, noun: "listings")
             row("Feeds Combined", summary.feedsCombined, checked: summary.pairsChecked, noun: "pairs")
             row("Names Tidied", summary.namesTidied, checked: summary.namesChecked, noun: "names")
+            if let usage = store.aiResults.usage, usage.requests > 0 {
+                LabeledContent("Estimated Cost") {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(usage.dollars.dollarText).monospacedDigit()
+                        if let last = store.aiResults.lastRunUsage {
+                            Text("Last run \(last.dollars.dollarText) · \(last.requests.formatted()) requests").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("ai-cost")
+            }
             let examples = store.aiResults.examples()
             if !examples.isEmpty {
                 DisclosureGroup("What AI Changed") {
@@ -78,7 +90,7 @@ private struct AIActivitySection: View {
         } header: {
             Text("Activity")
         } footer: {
-            Text("Runs after your lineup loads, when you open the app and after each refresh. Only new channels and listings are sent.")
+            Text("Runs after your lineup loads, when you open the app and after each refresh. Only new channels and listings are sent. The cost is estimated on this iPhone from the tokens each request used at GPT-6 Luna’s published prices; your OpenAI bill is the record.")
         }
     }
 
