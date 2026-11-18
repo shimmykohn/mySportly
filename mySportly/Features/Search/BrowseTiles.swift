@@ -87,7 +87,9 @@ struct BrowseCategoryView: View {
             var request = ChannelBrowseRequest()
             request.category = category; request.audience = store.audience
             request.collapseVariants = true; request.excludeInactive = true; request.ranked = true
-            channels = (try? await catalogWork { try directory.browse(request) }) ?? []
+            // Favorites, your languages and regions, interests and history first.
+            let preferences = store.recommendationPreferences
+            channels = (try? await catalogWork { try directory.browse(request, preferences: preferences) }) ?? []
         }
     }
 }
