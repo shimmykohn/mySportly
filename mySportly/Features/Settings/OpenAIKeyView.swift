@@ -59,6 +59,19 @@ private struct AIActivitySection: View {
             row("Games Found", summary.gamesFound, checked: summary.listingsChecked, noun: "listings")
             row("Feeds Combined", summary.feedsCombined, checked: summary.pairsChecked, noun: "pairs")
             row("Names Tidied", summary.namesTidied, checked: summary.namesChecked, noun: "names")
+            let examples = store.aiResults.examples()
+            if !examples.isEmpty {
+                DisclosureGroup("What AI Changed") {
+                    ForEach(examples, id: \.before) { example in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(example.before).font(.caption).foregroundStyle(.secondary).strikethrough()
+                            Text(example.after).font(.subheadline)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .accessibilityIdentifier("ai-examples")
+            }
             Button("Check Now") { store.runAIJobs() }
                 .disabled(store.aiActivity != nil || !store.catalogReady || store.demo)
                 .accessibilityIdentifier("ai-run-now")

@@ -101,6 +101,10 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     var aiResults = AIResults()
     /// What the AI jobs are doing right now, for Settings → OpenAI. Nil when idle.
     var aiActivity: String?
+    /// How far the current AI step is, 0...1, for Home's progress pill.
+    var aiFraction: Double?
+    /// What the last AI run changed, shown briefly on Home.
+    var aiSummary: String?
     @ObservationIgnored var aiJobsTask: Task<Void, Never>?
     @ObservationIgnored private var displayNames: [String: String] = [:]
     @ObservationIgnored private var derivedVariants: [String: [String]] = [:]

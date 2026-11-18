@@ -144,3 +144,15 @@ import Testing
         #expect(results.namesAsked == ["US| ESPN"])
     }
 }
+
+@Suite struct AIExamplesTests {
+    @Test func examplesShowOnlyWhatTheModelChangedBeyondLocalRules() {
+        var results = AIResults()
+        // Local rules already turn "US| ESPN HD" into "ESPN", so that isn't the model's doing.
+        results.names = ["US| ESPN HD": "ESPN", "|AR| ★ BEIN SPORTS 1 ★": "beIN Sports 1", "FOX": "FOX"]
+        results.vodNames = ["EN - THE MATRIX (1999) 4K": "The Matrix"]
+        let examples = results.examples()
+        #expect(examples.map(\.before) == ["|AR| ★ BEIN SPORTS 1 ★", "EN - THE MATRIX (1999) 4K"])
+        #expect(examples.first?.after == "beIN Sports 1")
+    }
+}

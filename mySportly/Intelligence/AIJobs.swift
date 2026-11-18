@@ -28,8 +28,12 @@ extension AppStore {
             var results = start
             results.startPass(CatalogPass.version)
             self?.aiActivity = "Starting…"
-            defer { self?.aiJobsTask = nil; self?.aiActivity = nil }
-            @MainActor func step(_ label: String, _ index: Int, of total: Int) { self?.aiActivity = "\(label) · \(index + 1) of \(total)" }
+            defer { self?.aiJobsTask = nil; self?.aiActivity = nil; self?.aiFraction = nil }
+            @MainActor func step(_ label: String, _ index: Int, of total: Int) {
+                self?.aiActivity = "\(label) · \(index + 1) of \(total)"
+                self?.aiFraction = total > 0 ? Double(index) / Double(total) : nil
+            }
+            var tidied = 0, titlesTidied = 0, combined = 0, sorted = 0
             let client = CatalogPassClient(key: key)
             var channelAnswers: [String: PassAnswer] = [:], candidates: [MergeCandidate] = []
             var failure: Error?
@@ -63,7 +67,10 @@ extension AppStore {
                             guard let answer = answers[row.key] else { continue }
                             results.namesAsked.insert(row.name)
                             // A name in several folders keeps its first answer.
-                            if let name = answer.name, named.insert(row.name).inserted { results.names[row.name] = name }
+                            if let name = answer.name, named.insert(row.name).inserted {
+                                if name != NameCleaning.local(row.name), results.names[row.name] != name { tidied += 1 }
+                                results.names[row.name] = name
+                            }
                         }
                         done += 1
                         step("Organizing channels", min(done, chunks.count - 1), of: chunks.count)
@@ -74,9 +81,12 @@ extension AppStore {
             // What the channel pass answered applies even if the run stopped early.
             if !channelAnswers.isEmpty {
                 let answers = channelAnswers
-                for (key, answer) in CatalogPass.mergeAnswers(candidates, answers: answers) where results.merges[key] == nil { results.merges[key] = answer }
+                for (key, answer) in CatalogPass.mergeAnswers(candidates, answers: answers) where results.merges[key] == nil {
+                    results.merges[key] = answer
+                    if answer.same { combined += 1 }
+                }
                 if let byChannel = try? await catalogWork({ CatalogPass.channelCategories(channels, answers: answers) }) {
-                    self?.savePlacements(CatalogPass.placements(pending, categories: CatalogPass.categoryPaths(taxonomy), channelCategory: byChannel))
+                    sorted = self?.savePlacements(CatalogPass.placements(pending, categories: CatalogPass.categoryPaths(taxonomy), channelCategory: byChannel)) ?? 0
                 }
             }
             if failure == nil {
@@ -95,7 +105,11 @@ extension AppStore {
                         for row in chunks[index] {
                             guard let answer = answers[row.key] else { continue }
                             results.vodNamesAsked?.insert(row.name)
-                            if let name = answer.name { results.vodNames?[row.name] = VODTitle.clean(name).title }
+                            if let name = answer.name {
+                                let title = VODTitle.clean(name).title
+                                if title != VODTitle.clean(row.name).title, results.vodNames?[row.name] != title { titlesTidied += 1 }
+                                results.vodNames?[row.name] = title
+                            }
                         }
                         done += 1
                         step("Tidying movie and show titles", min(done, chunks.count - 1), of: chunks.count)
@@ -108,6 +122,8 @@ extension AppStore {
             if failure == nil { results.lastRun = Date.now.timeIntervalSince1970 }
             await self?.applyAIResults(results, cache: catalogCache)
             if let failure { self?.openAI.report(failure) } else { self?.openAI.succeeded() }
+            let games = max(0, results.detectedGames.count - start.detectedGames.count)
+            self?.showAISummary(AppStore.aiSummaryText(names: tidied, titles: titlesTidied, feeds: combined, groups: sorted, games: games))
         }
     }
 
@@ -137,9 +153,27 @@ extension AppStore {
         }
     }
 
-    /// Saves new group placements. A group that changed meanwhile, or a
-    /// manual correction or current decision, wins.
-    func savePlacements(_ placements: [GroupPlacement]) {
+    /// "AI tidied 1,240 names · combined 85 feeds", or nil when nothing changed.
+    static func aiSummaryText(names: Int, titles: Int, feeds: Int, groups: Int, games: Int) -> String? {
+        let parts = [(groups, "sorted %@ groups"), (names, "tidied %@ channel names"), (feeds, "combined %@ duplicate feeds"),
+                     (titles, "tidied %@ titles"), (games, "found %@ games")]
+            .filter { $0.0 > 0 }.map { String(format: $0.1, $0.0.formatted()) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Shows what a run changed on Home for a few seconds.
+    func showAISummary(_ text: String?) {
+        guard let text else { return }
+        aiSummary = text
+        Task {
+            try? await Task.sleep(for: .seconds(6))
+            if aiSummary == text { aiSummary = nil }
+        }
+    }
+
+    /// Saves new group placements and returns how many. A group that changed
+    /// meanwhile, or a manual correction or current decision, wins.
+    @discardableResult func savePlacements(_ placements: [GroupPlacement]) -> Int {
         var updates: [String: Data?] = [:]
         for placement in placements {
             guard let current = directory?.nameGroups.byID[placement.id], current.fingerprint == placement.fingerprint else { continue }
@@ -148,9 +182,9 @@ extension AppStore {
             if existing?.isReusable(for: current) == true { continue }
             updates[key] = try? JSONEncoder().encode(placement)
         }
-        guard !updates.isEmpty else { return }
-        do { try personal.write(updates); rebuild() }
-        catch { openAI.report(error) }
+        guard !updates.isEmpty else { return 0 }
+        do { try personal.write(updates); rebuild(); return updates.count }
+        catch { openAI.report(error); return 0 }
     }
 
     /// Saves new answers and refreshes only what they change.

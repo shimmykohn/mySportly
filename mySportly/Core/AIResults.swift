@@ -67,6 +67,15 @@ public struct AIResults: Codable, Equatable, Sendable {
         vodNamesAsked = vodNamesAsked?.intersection(rawTitles)
     }
 
+    /// Names the model changed beyond what local rules do, as (provider
+    /// name, shown name), for Settings to show what AI did.
+    public func examples(limit: Int = 6) -> [(before: String, after: String)] {
+        let changed = names.filter { $0.value != NameCleaning.local($0.key) && $0.value != $0.key }
+        let titles = (vodNames ?? [:]).filter { $0.value != VODTitle.clean($0.key).title }
+        return (changed.sorted { $0.key < $1.key }.prefix(limit) + titles.sorted { $0.key < $1.key }.prefix(max(0, limit - changed.count)))
+            .map { (before: $0.key, after: $0.value) }
+    }
+
     /// The display name: the model's answer, else local rules.
     public func displayName(_ raw: String) -> String { names[raw] ?? NameCleaning.local(raw) }
 

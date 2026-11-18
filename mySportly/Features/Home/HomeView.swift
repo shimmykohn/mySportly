@@ -71,6 +71,7 @@ struct HomeView: View {
         // the ignored edge, where the bars' height is still reported.
         .ignoresSafeArea(edges: showsHero ? .top : [])
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { topInset = $0 }
+        .safeAreaInset(edge: .bottom) { HomeActivityPill() }
         .accessibilityIdentifier("home-root")
         // Verbatim: a localized key would format 1234 as "1,234".
         .accessibilityValue(Text(verbatim: "launch-ms=\(store.launchTimeline.milliseconds(to: .firstInteractive) ?? -1) ready=\(store.catalogReady ? 1 : 0)"))
