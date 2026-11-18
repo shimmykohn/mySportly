@@ -43,7 +43,7 @@ public struct AIResults: Codable, Equatable, Sendable {
     /// Forgets which names were asked under an older pass, keeping its
     /// answers on screen until the new ones arrive.
     public mutating func startPass(_ version: Int, titles titleVersion: Int = CatalogPass.titleVersion) {
-        if passVersion != version { namesAsked = []; vodNamesAsked = []; passVersion = version }
+        if passVersion != version { namesAsked = []; passVersion = version }
         if titlePassVersion != titleVersion { vodNamesAsked = []; titlePassVersion = titleVersion }
     }
 

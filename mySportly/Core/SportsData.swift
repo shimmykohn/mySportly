@@ -13,6 +13,8 @@ public struct SportsTeam: Codable, Identifiable, Hashable, Sendable {
     public var name: String
     public var leagueID: String
     public var logo: URL?
+    /// Other names guide listings use ("Man United"), from the schedule source.
+    public var aliases: [String]?
     public init(id: String, name: String, leagueID: String, logo: URL? = nil) {
         self.id = id; self.name = name; self.leagueID = leagueID; self.logo = logo
     }
@@ -30,6 +32,8 @@ public struct SportsGame: Codable, Identifiable, Hashable, Sendable {
     public var timestamp: Double
     public var status: SportsGameStatus
     public var guideEnd: Double?
+    /// TV networks carrying it, from the schedule ("CBS", "ESPN2").
+    public var networks: [String]?
     public init(id: String, leagueID: String, homeID: String, awayID: String, timestamp: Double, status: SportsGameStatus = .scheduled, guideEnd: Double? = nil) {
         self.id = id; self.leagueID = leagueID; self.homeID = homeID; self.awayID = awayID; self.timestamp = timestamp; self.status = status
         self.guideEnd = guideEnd

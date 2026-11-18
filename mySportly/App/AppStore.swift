@@ -222,7 +222,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             print("[Launch] seeded synthetic catalog")
         }
         #endif
-        Task { await sportsData.load() }
+        Task { await sportsData.load(); refreshSchedules() }
         // First frame: the small launch snapshot. The full catalog, cloud
         // status and network work all follow once Home is interactive.
         let snapshotRead = launchSignposter.beginInterval("snapshot")
@@ -313,6 +313,9 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     }
 
     func isFollowing(_ team: SportsTeam) -> Bool { homeFollows.teamIDs.contains(team.libraryItem.id) }
+    /// Fetches what's due from ESPN for the current follows.
+    func refreshSchedules() { sportsData.refresh(follows: homeFollows) }
+
     func toggleFollow(_ team: SportsTeam) {
         if isFollowing(team) { unfollow(team.libraryItem) } else { follow(team.libraryItem) }
     }
@@ -852,13 +855,27 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func feeds(for gameID: String, playableOnly: Bool = false) -> [Channel] {
         let date = clock
         if playableOnly, game(gameID)?.canWatch(at: date) != true { return [] }
-        return (gameLinks[gameID] ?? []).compactMap { link in
+        let ranked = (gameLinks[gameID] ?? []).compactMap { link -> (Channel, Int)? in
             // Before the full catalog, links come from the launch snapshot,
             // which kept only feeds that matched the audience when saved.
             guard (!playableOnly || link.isValid(at: date)), let channel = channelIndex[link.channelID], !flag(channel, "hidden"),
                   !catalogReady || audience.includes(language: language(channel), region: region(channel)) else { return nil }
-            return channel
-        }.sorted { name($0).localizedStandardCompare(name($1)) == .orderedAscending }
+            return (channel, feedScore(channel, evidence: link.evidence))
+        }
+        // Best first, so Watch plays it: favorites, guide evidence, your
+        // language, then picture quality; backups last.
+        return ranked.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : name($0.0).localizedStandardCompare(name($1.0)) == .orderedAscending }.map(\.0)
+    }
+
+    private func feedScore(_ channel: Channel, evidence: String) -> Int {
+        var score = flag(channel, "favorite") ? 100 : 0
+        score += evidence == "TV guide" ? 40 : evidence == "TV network" ? 20 : 30
+        if let preferred = languages.first, language(channel) == preferred { score += 15 }
+        let text = (channel.quality + " " + channel.name).uppercased()
+        if text.contains("4K") || text.contains("UHD") { score += 12 } else if text.contains("FHD") || text.contains("1080") { score += 10 }
+        else if text.contains("HD") { score += 8 } else if text.contains("SD") { score -= 5 }
+        if text.contains("BACKUP") || text.contains("(B)") { score -= 10 }
+        return score
     }
     /// A matched game, or one restored from the launch snapshot.
     func game(_ id: String) -> SportsGame? { sportsData.index.games[id] ?? homeSports.games.first { $0.id == id } }

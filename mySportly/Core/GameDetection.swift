@@ -34,7 +34,8 @@ public enum GameDetection {
                 DecisionChoice(value: team.id, description: [team.name, leagues[team.leagueID]?.name].compactMap { $0 }.joined(separator: " · "))
             }
             choices.append(DecisionChoice(value: "none", description: "Not a game between two of these teams (studio show, replay, other sport or team)."))
-            let data = DecisionPart.json(.object(["title": .string(listing.title), "description": .string(listing.summary), "channel": .string(listing.context)]))
+            let data = DecisionPart.json(.object(["title": .string(GroupNames.clean(listing.title)), "description": .string(GroupNames.clean(listing.summary)),
+                                                  "channel": .string(GroupNames.clean(listing.context))]))
             return [
                 DecisionQuestion(name: listing.key + ".1", instructions: [.text("Which team is named first in this listing's matchup?"), data], choices: choices),
                 DecisionQuestion(name: listing.key + ".2", instructions: [.text("Which team is named second in this listing's matchup?"), data], choices: choices),

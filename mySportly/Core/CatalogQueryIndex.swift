@@ -283,7 +283,8 @@ public struct CatalogQueryIndex: Sendable {
                 guard result[key] == nil, !known.contains(key) else { continue }
                 let context = value.categories.joined(separator: " ") + " " + entry.channel.group + " " + entry.name
                 let sports = program.sports || entry.sports
-                guard parser.opponents(title: value.title, context: context) == nil,
+                // Only sports listings: "Live at Five" isn't a matchup.
+                guard sports, parser.opponents(title: value.title, context: context) == nil,
                       !sports || parser.opponents(title: value.summary, context: value.title + " " + context) == nil else { continue }
                 var candidates = parser.candidates(title: value.title, context: context)
                 if candidates.isEmpty, sports { candidates = parser.candidates(title: value.summary, context: value.title + " " + context) }
@@ -292,7 +293,8 @@ public struct CatalogQueryIndex: Sendable {
                                           candidates: candidates, end: value.end)
             }
         }
-        return result.values.sorted { $0.key < $1.key }
+        // Soonest first, so a run's cap keeps tonight's games.
+        return result.values.sorted { $0.end == $1.end ? $0.key < $1.key : $0.end < $1.end }
     }
 
     /// `detected` holds model answers by `GameDetection.key`; they fill in only
@@ -353,6 +355,48 @@ public struct CatalogQueryIndex: Sendable {
             }
             if let current { games.append(current) }
         }
+        // Scheduled games (ESPN): a guide game for the same two teams within
+        // three hours takes the schedule's identity, status and networks, and
+        // games the guide doesn't list stay, for network feeds and team pages.
+        let scheduled = reference.catalog.games.filter { $0.start > date - 8 * 3600 && $0.start < date + 7 * 86400 }
+        var merged: [SportsGame] = [], claimed = Set<String>()
+        for game in games {
+            let pair = Set([game.homeID, game.awayID])
+            guard let match = scheduled.first(where: { !claimed.contains($0.id) && Set([$0.homeID, $0.awayID]) == pair && abs($0.timestamp - game.timestamp) <= 3 * 3600 }) else {
+                merged.append(game); continue
+            }
+            claimed.insert(match.id)
+            var adopted = match; adopted.guideEnd = game.guideEnd
+            merged.append(adopted)
+            for (channelID, link) in links.removeValue(forKey: game.id) ?? [:] {
+                var moved = link; moved.gameID = match.id
+                links[match.id, default: [:]][channelID] = moved
+            }
+        }
+        merged += scheduled.filter { !claimed.contains($0.id) }
+        // A game's TV networks ("CBS", "ESPN2") are feeds too: lineup channels
+        // with exactly that name, from shortly before the start.
+        let networkNames = Set(merged.flatMap { $0.networks ?? [] }.map(SportsNetworks.key))
+        var byNetwork: [String: [Int]] = [:]
+        if !networkNames.isEmpty {
+            for (position, entry) in entries.enumerated() where !entry.inactive {
+                if position.isMultiple(of: 512) { try Task.checkCancellation() }
+                let key = SportsNetworks.key(entry.name)
+                if networkNames.contains(key) { byNetwork[key, default: []].append(position) }
+            }
+        }
+        for game in merged where game.status != .finished && game.status != .cancelled {
+            for network in game.networks ?? [] {
+                for position in byNetwork[SportsNetworks.key(network)] ?? [] {
+                    let channel = entries[position].channel
+                    guard links[game.id]?[channel.id] == nil else { continue }
+                    let end = game.guideEnd.map(Date.init(timeIntervalSince1970:)) ?? game.start + 4 * 3600
+                    links[game.id, default: [:]][channel.id] = SportsFeedLink(gameID: game.id, channelID: channel.id, programID: nil,
+                        validFrom: game.start - 30 * 60, validUntil: end, evidence: "TV network")
+                }
+            }
+        }
+        games = merged
         var catalog = reference.catalog; catalog.games = games
         let index = try SportsDataIndex(catalog), matcher = SportsGameMatcher(index: index)
         for (position, entry) in entries.enumerated() {

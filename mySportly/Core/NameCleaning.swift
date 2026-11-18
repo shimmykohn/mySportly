@@ -51,18 +51,31 @@ public enum NameCleaning {
         return words.count >= 2 && letters.count >= 5 && letters == letters.uppercased() && words.contains { $0.filter(\.isLetter).count >= 5 }
     }
 
-    /// A proposal is kept only when every word comes from the original name,
-    /// it adds no digits and is not longer.
+    /// A proposal is kept only when every word comes from the original name
+    /// and it adds no digits. It may be a little longer ("ESPN2" → "ESPN 2").
     public static func validate(raw: String, proposed: String) -> String? {
         let candidate = proposed.split(whereSeparator: \.isWhitespace).joined(separator: " ").trimmingCharacters(in: edges)
         let source = raw.precomposedStringWithCompatibilityMapping
-        guard !candidate.isEmpty, candidate.count <= source.count, candidate.count <= 60 else { return nil }
+        guard !candidate.isEmpty, candidate.count <= source.count + 12, candidate.count <= 100 else { return nil }
         let sourceWords = words(source), sourceText = sourceWords.joined(separator: " ")
         let proposedWords = words(candidate)
         guard !proposedWords.isEmpty, proposedWords.allSatisfy({ sourceWords.contains($0) || sourceText.contains($0) }) else { return nil }
         let digits = Set(source.filter(\.isNumber))
         guard candidate.filter(\.isNumber).allSatisfy(digits.contains) else { return nil }
         return candidate
+    }
+
+    /// Whether two names share any word, ignoring case and accents.
+    public static func sharesWord(_ a: String, _ b: String) -> Bool {
+        let left = Set(words(a)), right = words(b)
+        return right.contains { left.contains($0) || (a.lowercased().contains($0) && $0.count > 1) }
+    }
+
+    /// "NFL 07" → "NFL": a numbered set's name without the slot number.
+    public static func droppingSlotNumber(_ name: String) -> String {
+        var words = name.split(whereSeparator: \.isWhitespace).map(String.init)
+        while let last = words.last, words.count > 1, last.allSatisfy({ $0.isNumber || $0 == "#" }) { words.removeLast() }
+        return words.joined(separator: " ").trimmingCharacters(in: edges)
     }
 
     static func words(_ text: String) -> [String] {

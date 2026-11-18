@@ -13,8 +13,8 @@ public struct GuideGameParser: Sendable {
         var rules: [TeamRule] = [], tokens: [String: Set<Int>] = [:]
         for team in reference.catalog.teams {
             let position = rules.count
-            rules.append(TeamRule(team: team, matcher: SportsFollowMatcher([team.name])))
-            let names = [team.name] + (SportsFollowCatalog.choice(named: team.name)?.aliases ?? [])
+            rules.append(TeamRule(team: team, matcher: SportsFollowMatcher([team.name] + (team.aliases ?? []))))
+            let names = [team.name] + (team.aliases ?? []) + (SportsFollowCatalog.choice(named: team.name)?.aliases ?? [])
             for word in names.flatMap({ SportsFollowMatcher.normalize($0).split(separator: " ").map(String.init) }) where word.count > 2 {
                 tokens[word, default: []].insert(position)
             }

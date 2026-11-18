@@ -26,6 +26,7 @@ struct TeamPage: View {
                 }
             }
             GameListSection(games: games)
+            SeasonSection(team: team)
         }
         .navigationTitle(team.name).navigationBarTitleDisplayMode(.inline)
     }
@@ -80,6 +81,59 @@ struct GameListSection: View {
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             }
         }
+    }
+}
+
+/// A team's season from the schedule: opponent, time, TV networks, and
+/// Watch when a channel in the lineup carries it.
+struct SeasonSection: View {
+    @Environment(AppStore.self) private var store
+    let team: SportsLibraryItem
+
+    var body: some View {
+        let games = store.season(for: team)
+        if !games.isEmpty {
+            Section("Schedule") {
+                ForEach(games.prefix(40)) { SeasonRow(game: $0, team: team) }
+            }
+            .accessibilityIdentifier("team-schedule")
+        }
+    }
+}
+
+private struct SeasonRow: View {
+    @Environment(AppStore.self) private var store
+    let game: SportsGame
+    let team: SportsLibraryItem
+
+    var body: some View {
+        let teams = store.sportsData.reference.teams
+        let home = teams[game.homeID]?.libraryItem.id == team.id
+        let opponent = teams[home ? game.awayID : game.homeID]
+        let watchable = !store.feeds(for: game.id, playableOnly: true).isEmpty
+        HStack(spacing: 12) {
+            SportsLogo(url: opponent?.logo, size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+                Text((home ? "vs " : "at ") + (opponent?.libraryItem.name ?? "TBD")).font(.subheadline.weight(.semibold))
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if watchable {
+                Button("Watch", systemImage: "play.fill") { store.watchGame(game, source: "season.\(game.id)") }
+                    .labelStyle(.iconOnly).buttonStyle(.glassProminent).buttonBorderShape(.circle)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var detail: String {
+        let when = switch game.status {
+        case .live: "Live now"
+        case .finished: "Final"
+        case .postponed: "Postponed"
+        default: game.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+        }
+        return ([when] + (game.networks ?? []).prefix(2)).joined(separator: " · ")
     }
 }
 

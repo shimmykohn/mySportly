@@ -27,6 +27,7 @@ import Combine
                         Task {
                             guard store.catalogReady else { return }
                             store.matchSportsGames()
+                            store.refreshSchedules()
                             store.openAI.foregrounded()
                             store.organizeInBackground()
                             let revision = store.personal.revision

@@ -37,18 +37,18 @@ import Testing
         let data = try CatalogPass.body(.titles, rows: [PassRow(key: "k", name: "EN - Dune (2021) 4K", context: ["Movie"])])
         let raw = String(decoding: data, as: UTF8.self)
         #expect(raw.contains("1\\tEN - Dune (2021) 4K\\tMovie"))
-        #expect(raw.contains("\"genre\"") && raw.contains("\"Sci-Fi\"") && raw.contains("\"same\""))
-        #expect(!raw.contains("category") && !raw.contains("family"))
+        #expect(raw.contains("\"subject\"") && raw.contains("\"Sci-Fi\"") && raw.contains("\"same\""))
+        #expect(!raw.contains("\"section\"") && !raw.contains("\"set\""))
     }
 
     @Test func answersMapBackToRowsAndAreChecked() throws {
         let rows = [PassRow(key: "a", name: "US| ESPN FHD"), PassRow(key: "b", name: "US| ESPN BACKUP"), PassRow(key: "c", name: "FOX NEWS")]
         let text = self.rows(#"""
-        [{"n":1,"name":"ESPN","category":2,"same":null},
-         {"n":2,"name":"ESPN","category":2,"same":1},
-         {"n":3,"name":"Fox News Channel Live","category":9,"same":7},
-         {"n":1,"name":"Duplicate answer","category":1,"same":null},
-         {"n":12,"name":"Unknown row","category":1,"same":null}]
+        [{"n":1,"name":"ESPN","section":2,"same":null},
+         {"n":2,"name":"ESPN","section":2,"same":1},
+         {"n":3,"name":"Fox News Channel Live","section":9,"same":7},
+         {"n":1,"name":"Duplicate answer","section":1,"same":null},
+         {"n":12,"name":"Unknown row","section":1,"same":null}]
         """#)
         let answers = try CatalogPass.decode(response(text), .channels, rows: rows, categoryCount: 3)
         #expect(answers.count == 3)
@@ -164,9 +164,9 @@ import Testing
 
     @Test func familiesComeBackCheckedAgainstTheName() throws {
         let rows = [PassRow(key: "a", name: "NFL 07: Cowboys vs Packers"), PassRow(key: "b", name: "ESPN 2"), PassRow(key: "c", name: "PPV 3")]
-        let text = #"{"rows":[{"n":1,"name":"NFL 07: Cowboys vs Packers","category":1,"same":null,"family":"NFL"},"#
-            + #"{"n":2,"name":"ESPN 2","category":1,"same":null,"family":null},"#
-            + #"{"n":3,"name":"PPV 3","category":1,"same":null,"family":"Pay Per View"}]}"#
+        let text = #"{"rows":[{"n":1,"name":"NFL 07: Cowboys vs Packers","section":1,"same":null,"set":"NFL"},"#
+            + #"{"n":2,"name":"ESPN 2","section":1,"same":null,"set":null},"#
+            + #"{"n":3,"name":"PPV 3","section":1,"same":null,"set":"Pay Per View"}]}"#
         let body: [String: Any] = ["status": "completed", "output": [["type": "message", "content": [["type": "output_text", "text": text]]]]]
         let answers = try CatalogPass.decode(JSONSerialization.data(withJSONObject: body), .channels, rows: rows, categoryCount: 1)
         #expect(answers["a"]?.family == "NFL")
@@ -192,7 +192,7 @@ import Testing
 @Suite struct TitlePassTests {
     @Test func genresAreCheckedAgainstTheList() throws {
         let rows = [PassRow(key: "a", name: "EN - Dune (2021)", context: ["Movie"]), PassRow(key: "b", name: "Arrival", context: ["Movie"])]
-        let text = #"{"rows":[{"n":1,"name":"Dune","same":null,"genre":"Sci-Fi"},{"n":2,"name":"Arrival","same":null,"genre":"Space Opera"}]}"#
+        let text = #"{"rows":[{"n":1,"name":"Dune","same":null,"subject":"Sci-Fi"},{"n":2,"name":"Arrival","same":null,"subject":"Space Opera"}]}"#
         let body: [String: Any] = ["status": "completed", "output": [["type": "message", "content": [["type": "output_text", "text": text]]]]]
         let answers = try CatalogPass.decode(JSONSerialization.data(withJSONObject: body), .titles, rows: rows)
         #expect(answers["a"]?.genre == "Sci-Fi")

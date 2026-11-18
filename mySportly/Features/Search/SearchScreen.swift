@@ -98,7 +98,7 @@ struct SearchScreen: View {
         }
         .searchable(text: $query, isPresented: $searchPresented, placement: .navigationBarDrawer(displayMode: .always), prompt: "Teams, channels and shows")
         .onChange(of: query) { _, _ in search() }
-        .onSubmit(of: .search) { store.addRecentSearch(text) }
+        .onSubmit(of: .search) { store.addRecentSearch(text); search(askAI: true) }
         .onChange(of: store.queryRevision) { _, _ in if !text.isEmpty { search() } }
         .onChange(of: store.sportsLinkRevision) { _, _ in if !text.isEmpty { search() } }
         .onAppear { receiveRoute() }
@@ -111,9 +111,10 @@ struct SearchScreen: View {
         query = request; store.searchRequest = nil
     }
 
-    /// Local matching only: as-you-type, against the prepared index or, before
-    /// it exists, the launch snapshot.
-    private func search() {
+    /// Local matching as you type, against the prepared index or, before it
+    /// exists, the launch snapshot. OpenAI is asked only on Search, never
+    /// while typing.
+    private func search(askAI: Bool = false) {
         searchTask?.cancel()
         let request = text
         limit = 50
@@ -140,7 +141,7 @@ struct SearchScreen: View {
                 var found = SearchGrouping.group(query: request, matches: matches, choices: choices, followedIDs: followed, at: date)
                 // Only when local matching found nothing: ask OpenAI what the
                 // words mean, then search locally with that. Same place, no button.
-                if found.isEmpty, request.split(separator: " ").count >= 2, store.openAI.configured {
+                if askAI, found.isEmpty, movies.isEmpty, shows.isEmpty, request.split(separator: " ").count >= 2, store.openAI.configured {
                     searched = ""
                     let teams = choices.filter { $0.kind == .team }.map(\.name), leagues = choices.filter { $0.kind == .league }.map(\.name)
                     if let intent = await store.openAI.interpret(request, teams: teams, leagues: leagues, languages: store.languages) {

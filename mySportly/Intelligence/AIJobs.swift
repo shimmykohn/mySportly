@@ -84,9 +84,10 @@ extension AppStore {
                         for row in chunk {
                             guard let answer = answers[row.key] else { continue }
                             results.namesAsked.insert(row.name)
-                            results.families?[row.name] = answer.family
                             // A name in several folders keeps its first answer.
-                            if let name = answer.name, named.insert(row.name).inserted {
+                            guard named.insert(row.name).inserted else { continue }
+                            results.families?[row.name] = answer.family
+                            if let name = answer.name {
                                 if name != NameCleaning.local(row.name), results.names[row.name] != name { tidied += 1 }
                                 results.names[row.name] = name
                             }
@@ -159,7 +160,11 @@ extension AppStore {
                 group.addTask {
                     do { let (output, usage) = try await work(input); return (index, output, usage) }
                     catch let failure as PassFailure { return (index, nil, failure.usage) }
+                    // One slow or failed request leaves its items for the next run;
+                    // only key and quota problems stop the others.
                     catch DecisionsFailure.invalidResponse { return (index, nil, TokenUsage(requests: 1)) }
+                    catch DecisionsFailure.unavailable { return (index, nil, TokenUsage()) }
+                    catch is URLError { return (index, nil, TokenUsage()) }
                 }
             }
             while next < min(width, inputs.count) { start() }

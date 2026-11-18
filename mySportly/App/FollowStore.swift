@@ -6,7 +6,7 @@ extension AppStore {
     var followedTeams: [SportsLibraryItem] { sportsLibrary.filter { $0.kind == .team } }
     var addedLeagues: [SportsLibraryItem] { sportsLibrary.filter { $0.kind == .league } }
     func isFollowing(_ item: SportsLibraryItem) -> Bool { hasSportsItem(item) }
-    func follow(_ item: SportsLibraryItem) { saveSportsItem(item); scheduleGameAlerts() }
+    func follow(_ item: SportsLibraryItem) { saveSportsItem(item); scheduleGameAlerts(); refreshSchedules() }
     func unfollow(_ item: SportsLibraryItem) { removeSportsItem(item); scheduleGameAlerts() }
 
     func notifiesGameStart(_ team: SportsLibraryItem) -> Bool { personal.value("sports.notify.\(team.id)", default: false) }
@@ -40,6 +40,15 @@ extension AppStore {
 
 extension AppStore {
     /// Live and next-7-day games for a team or league that have a feed in the lineup.
+    /// A team's season from the schedule, upcoming games first, whether or
+    /// not the lineup carries them.
+    func season(for team: SportsLibraryItem) -> [SportsGame] {
+        let index = sportsData.reference, now = clock
+        let ids = Set(index.catalog.teams.filter { $0.libraryItem.id == team.id }.map(\.id))
+        guard !ids.isEmpty else { return [] }
+        return index.orderedGames.filter { (ids.contains($0.homeID) || ids.contains($0.awayID)) && $0.start > now - 4 * 3600 && $0.status != .cancelled }
+    }
+
     func upcomingGames(for item: SportsLibraryItem) -> [HomeGame] {
         let date = clock
         return homeSports.games.compactMap { game -> HomeGame? in
