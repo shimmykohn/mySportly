@@ -21,10 +21,12 @@ public struct Movie: Codable, Hashable, Sendable, Identifiable {
     public var rating: Double?
     public var added: Date?
     public var container: String
+    /// The provider's TMDB id, when its list includes one.
+    public var tmdbID: Int?
     public init(id: String, sourceID: UUID, providerID: String, rawTitle: String, title: String, year: Int? = nil, categoryID: String = "",
-                poster: URL? = nil, rating: Double? = nil, added: Date? = nil, container: String = "mp4") {
+                poster: URL? = nil, rating: Double? = nil, added: Date? = nil, container: String = "mp4", tmdbID: Int? = nil) {
         self.id = id; self.sourceID = sourceID; self.providerID = providerID; self.rawTitle = rawTitle; self.title = title; self.year = year
-        self.categoryID = categoryID; self.poster = poster; self.rating = rating; self.added = added; self.container = container
+        self.categoryID = categoryID; self.poster = poster; self.rating = rating; self.added = added; self.container = container; self.tmdbID = tmdbID
     }
 }
 
@@ -40,10 +42,12 @@ public struct Series: Codable, Hashable, Sendable, Identifiable {
     public var plot: String
     public var genre: String
     public var rating: Double?
+    /// The provider's TMDB id, when its list includes one.
+    public var tmdbID: Int?
     public init(id: String, sourceID: UUID, providerID: String, rawTitle: String, title: String, year: Int? = nil, categoryID: String = "",
-                poster: URL? = nil, plot: String = "", genre: String = "", rating: Double? = nil) {
+                poster: URL? = nil, plot: String = "", genre: String = "", rating: Double? = nil, tmdbID: Int? = nil) {
         self.id = id; self.sourceID = sourceID; self.providerID = providerID; self.rawTitle = rawTitle; self.title = title; self.year = year
-        self.categoryID = categoryID; self.poster = poster; self.plot = plot; self.genre = genre; self.rating = rating
+        self.categoryID = categoryID; self.poster = poster; self.plot = plot; self.genre = genre; self.rating = rating; self.tmdbID = tmdbID
     }
 }
 
@@ -55,6 +59,9 @@ public struct MovieDetail: Codable, Hashable, Sendable {
     public var cast = ""
     public var backdrop: URL?
     public var year: Int?
+    /// The provider's TMDB and IMDb ids, when its info has them.
+    public var tmdbID: Int?
+    public var imdbID: String?
     public init() {}
 }
 
@@ -87,7 +94,12 @@ public struct Season: Codable, Hashable, Sendable, Identifiable {
 public struct SeriesDetail: Codable, Hashable, Sendable {
     public var seasons: [Season] = []
     public var backdrop: URL?
-    public init(seasons: [Season] = [], backdrop: URL? = nil) { self.seasons = seasons; self.backdrop = backdrop }
+    /// The provider's TMDB and IMDb ids, when its info has them.
+    public var tmdbID: Int?
+    public var imdbID: String?
+    public init(seasons: [Season] = [], backdrop: URL? = nil, tmdbID: Int? = nil, imdbID: String? = nil) {
+        self.seasons = seasons; self.backdrop = backdrop; self.tmdbID = tmdbID; self.imdbID = imdbID
+    }
     public var episodes: [Episode] { seasons.flatMap(\.episodes) }
 }
 
@@ -132,7 +144,8 @@ public enum VODTitle {
 /// values as "" or null.
 struct XtreamValue: Decodable {
     let string: String
-    var int: Int? { Int(string) ?? Double(string).map { Int($0) } }
+    /// Out-of-range numbers ("1e30") are nil rather than a crash.
+    var int: Int? { Int(string) ?? Double(string).flatMap { $0.isFinite && abs($0) < 1e15 ? Int($0) : nil } }
     var double: Double? { Double(string) }
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -148,10 +161,12 @@ public enum XtreamVOD {
     private struct MovieRow: Decodable {
         var stream_id: XtreamValue; var name: String?; var stream_icon: String?; var category_id: XtreamValue?
         var rating: XtreamValue?; var added: XtreamValue?; var container_extension: String?; var year: XtreamValue?
+        var tmdb_id: XtreamValue?; var tmdb: XtreamValue?
     }
     private struct SeriesRow: Decodable {
         var series_id: XtreamValue; var name: String?; var cover: String?; var category_id: XtreamValue?
         var plot: String?; var genre: String?; var rating: XtreamValue?; var releaseDate: String?; var year: XtreamValue?
+        var tmdb_id: XtreamValue?; var tmdb: XtreamValue?
     }
 
     /// Lenient: a row that won't decode is skipped, not fatal.
@@ -179,7 +194,8 @@ public enum XtreamVOD {
             return Movie(id: StableID.vod(source: sourceID, kind: "movie", provider: provider), sourceID: sourceID, providerID: provider,
                          rawTitle: name, title: clean.title, year: clean.year ?? row.year?.int.flatMap(validYear),
                          categoryID: row.category_id?.string ?? "", poster: url(row.stream_icon), rating: row.rating?.double.flatMap(validRating),
-                         added: row.added?.double.map(Date.init(timeIntervalSince1970:)), container: container(row.container_extension))
+                         added: row.added?.double.map(Date.init(timeIntervalSince1970:)), container: container(row.container_extension),
+                         tmdbID: tmdbID(row.tmdb_id, row.tmdb))
         }
     }
 
@@ -192,7 +208,7 @@ public enum XtreamVOD {
             return Series(id: StableID.vod(source: sourceID, kind: "series", provider: provider), sourceID: sourceID, providerID: provider,
                           rawTitle: name, title: clean.title, year: clean.year ?? row.year?.int.flatMap(validYear) ?? year(row.releaseDate),
                           categoryID: row.category_id?.string ?? "", poster: url(row.cover), plot: row.plot ?? "", genre: row.genre ?? "",
-                          rating: row.rating?.double.flatMap(validRating))
+                          rating: row.rating?.double.flatMap(validRating), tmdbID: tmdbID(row.tmdb_id, row.tmdb))
         }
     }
 
@@ -201,6 +217,7 @@ public enum XtreamVOD {
         struct Info: Decodable {
             var plot: String?; var description: String?; var duration_secs: XtreamValue?; var genre: String?; var director: String?
             var cast: String?; var actors: String?; var backdrop_path: Backdrop?; var releasedate: String?; var release_date: String?
+            var tmdb_id: XtreamValue?; var tmdb: XtreamValue?; var imdb_id: XtreamValue?
         }
     }
     /// `backdrop_path` is a list on most panels, a string on some.
@@ -222,6 +239,8 @@ public enum XtreamVOD {
         detail.cast = info.cast ?? info.actors ?? ""
         detail.backdrop = url(info.backdrop_path?.first)
         detail.year = year(info.releasedate ?? info.release_date)
+        detail.tmdbID = tmdbID(info.tmdb_id, info.tmdb)
+        detail.imdbID = imdbID(info.imdb_id)
         return detail
     }
 
@@ -229,7 +248,7 @@ public enum XtreamVOD {
         var seasons: [Lossy<SeasonRow>]?
         var info: Info?
         var episodes: EpisodeMap?
-        struct Info: Decodable { var backdrop_path: Backdrop? }
+        struct Info: Decodable { var backdrop_path: Backdrop?; var tmdb_id: XtreamValue?; var tmdb: XtreamValue?; var imdb_id: XtreamValue? }
         struct SeasonRow: Decodable { var season_number: XtreamValue?; var name: String? }
     }
     private struct EpisodeRow: Decodable {
@@ -274,7 +293,8 @@ public enum XtreamVOD {
             let name = names[number].flatMap { $0.isEmpty ? nil : $0 } ?? "Season \(number)"
             return Season(number: number, name: name, episodes: episodes)
         }
-        return SeriesDetail(seasons: seasons, backdrop: url(decoded.info?.backdrop_path?.first))
+        return SeriesDetail(seasons: seasons, backdrop: url(decoded.info?.backdrop_path?.first),
+                            tmdbID: tmdbID(decoded.info?.tmdb_id, decoded.info?.tmdb), imdbID: imdbID(decoded.info?.imdb_id))
     }
 
     /// Providers often title episodes "Show Name - S01E03 - Pilot".
@@ -300,6 +320,16 @@ public enum XtreamVOD {
     private static func container(_ text: String?) -> String {
         let value = (text ?? "").trimmingCharacters(in: CharacterSet(charactersIn: ". ")).lowercased()
         return !value.isEmpty && value.count <= 5 && value.allSatisfy({ $0.isLetter || $0.isNumber }) ? value : "mp4"
+    }
+    /// Panels name it `tmdb_id` or `tmdb`, as a number or a string; 0 and "" mean none.
+    private static func tmdbID(_ values: XtreamValue?...) -> Int? {
+        values.lazy.compactMap { $0?.int }.first { $0 > 0 }
+    }
+    /// "tt0137523"; anything else is ignored.
+    private static func imdbID(_ value: XtreamValue?) -> String? {
+        guard let text = value?.string.trimmingCharacters(in: .whitespaces).lowercased(), text.hasPrefix("tt"),
+              (7...12).contains(text.count), text.dropFirst(2).allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return text
     }
     private static func validYear(_ value: Int) -> Int? { (1900...2100).contains(value) ? value : nil }
     private static func validRating(_ value: Double) -> Double? { value > 0 && value <= 10 ? value : nil }
@@ -391,6 +421,7 @@ public protocol VODItem: Sendable, Identifiable where ID == String {
     var year: Int? { get }
     var rating: Double? { get }
     var addedDate: Date? { get }
+    var tmdbID: Int? { get }
 }
 extension Movie: VODItem { public var addedDate: Date? { added } }
 extension Series: VODItem { public var addedDate: Date? { nil } }
