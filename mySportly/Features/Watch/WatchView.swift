@@ -44,6 +44,7 @@ struct WatchView: View {
         }
         .refreshable { await store.loadVOD(force: true) }
         .task { await store.loadVOD() }
+        .task(id: store.vodLanguages) { await library.setLanguages(store.vodLanguages) }
         .onChange(of: shelf) { _, _ in filter.category = nil; filter.decade = nil }
         .task(id: FilterKey(filter: filter, shelf: shelf, revision: library.revision, watched: watched)) {
             let filter = filter, movieRows = library.movieRows, seriesRows = library.seriesRows, shelf = shelf, genres = library.genres
@@ -66,7 +67,21 @@ struct WatchView: View {
     }
 
     private func filterMenu(_ library: VODLibrary) -> some View {
-        Menu {
+        let languages = store.vodLanguages
+        let mine = languages.preferred.map(VODLanguage.name).formatted(.list(type: .and))
+        return Menu {
+            Picker(selection: Binding(get: { languages.choice }, set: { store.setVODLanguage($0) })) {
+                Text(mine.isEmpty ? "My Languages" : "My Languages (\(mine))").tag(VODLanguages.Choice.mine)
+                Text("All Languages").tag(VODLanguages.Choice.all)
+                ForEach(library.availableLanguages, id: \.self) { code in
+                    Text(VODLanguage.name(code)).tag(VODLanguages.Choice.only(code))
+                }
+            } label: {
+                Label("Language", systemImage: "globe")
+                Text(languageSummary(languages.choice))
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("watch-language")
             Picker("Sort By", selection: $filter.sort) {
                 ForEach(VODFilter.Sort.allCases, id: \.self) { sort in
                     if sort != .recent || shelf == .movies { Text(sort.rawValue).tag(sort) }
@@ -96,9 +111,18 @@ struct WatchView: View {
                 Button("Reset", systemImage: "arrow.counterclockwise", role: .destructive) { filter = VODFilter() }
             }
         } label: {
-            Label("Filter", systemImage: filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+            let active = filter.isActive || languages.choice != .mine
+            Label("Filter", systemImage: active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
         }
         .accessibilityIdentifier("watch-filter")
+    }
+
+    private func languageSummary(_ choice: VODLanguages.Choice) -> String {
+        switch choice {
+        case .mine: "My Languages"
+        case .all: "All Languages"
+        case .only(let code): VODLanguage.name(code)
+        }
     }
 
     @ViewBuilder private func shelves(_ library: VODLibrary) -> some View {
@@ -112,6 +136,12 @@ struct WatchView: View {
         if !continuing.isEmpty {
             HomeRow(title: "Continue Watching", identifier: "watch-continue") {
                 ForEach(continuing) { ContinueCard(item: $0) }
+            }
+        }
+        let later = store.watchLater.filter { shelf == .movies ? $0.kind == .movie : $0.kind == .show }
+        if !later.isEmpty {
+            HomeRow(title: "Watch Later", identifier: "watch-later") {
+                ForEach(later) { WatchLaterCard(item: $0) }
             }
         }
         if library.hasContent ? (shelf == .movies ? library.movieRows.isEmpty : library.seriesRows.isEmpty) : !Downloads.shared.records.isEmpty {
@@ -150,12 +180,24 @@ struct WatchView: View {
                     Button("Try Again") { Task { await store.loadVOD(force: true) } }.buttonStyle(.bordered)
                 }
             case .ready:
-                ContentUnavailableView {
-                    Label(shelf == .movies ? "No Movies" : "No TV Shows", systemImage: "film.stack")
-                } description: {
-                    Text("Your provider didn’t send any \(shelf == .movies ? "movies" : "shows") this time.")
-                } actions: {
-                    Button("Refresh") { Task { await store.loadVOD(force: true) } }.buttonStyle(.bordered)
+                let hidden = shelf == .movies ? library.hiddenByLanguage.movies : library.hiddenByLanguage.shows
+                if hidden > 0 {
+                    // Everything here is in other languages.
+                    ContentUnavailableView {
+                        Label(shelf == .movies ? "No Movies in Your Languages" : "No Shows in Your Languages", systemImage: "globe")
+                    } description: {
+                        Text("\(hidden.formatted()) \(shelf == .movies ? (hidden == 1 ? "movie is" : "movies are") : (hidden == 1 ? "show is" : "shows are")) in other languages.")
+                    } actions: {
+                        Button("Show All Languages") { store.setVODLanguage(.all) }.buttonStyle(.bordered)
+                    }
+                } else {
+                    ContentUnavailableView {
+                        Label(shelf == .movies ? "No Movies" : "No TV Shows", systemImage: "film.stack")
+                    } description: {
+                        Text("Your provider didn’t send any \(shelf == .movies ? "movies" : "shows") this time.")
+                    } actions: {
+                        Button("Refresh") { Task { await store.loadVOD(force: true) } }.buttonStyle(.bordered)
+                    }
                 }
             }
         }
@@ -297,6 +339,7 @@ struct ShowLink: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button("Play", systemImage: "play.fill") { store.playNext(of: show) }
+            WatchLaterMenuItem(item: WatchLaterItem(show))
         }
         .accessibilityIdentifier("show-\(show.id)")
     }
@@ -315,6 +358,7 @@ struct MovieMenu: View {
         Button(progress.isFinished ? "Mark as Unwatched" : "Mark as Watched", systemImage: progress.isFinished ? "circle" : "checkmark.circle") {
             store.setWatched(progress, !progress.isFinished)
         }
+        WatchLaterMenuItem(item: WatchLaterItem(movie))
         DownloadMenuItems(item: progress)
         ExternalPlayItems(item: progress)
     }

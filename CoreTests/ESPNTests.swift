@@ -21,6 +21,25 @@ import Testing
         try catalog.validate()
     }
 
+    @Test func scoreboardTeamsKeepTheirSingleLogo() throws {
+        let json = #"{"events":[{"id":"501","date":"2026-11-22T18:00Z","competitions":[{"competitors":[{"homeAway":"home","team":{"id":"6","displayName":"Dallas Cowboys","logo":"https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/dal.png"}},{"homeAway":"away","team":{"id":"10","displayName":"Tennessee Titans"}}]}]}]}"#
+        let found = try ESPN.events(Data(json.utf8), league: league)
+        #expect(found.teams.first { $0.id == "6" }?.logo?.absoluteString == "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/dal.png")
+        // A team saved without a logo picks one up from a later feed.
+        var snapshot = ESPNSnapshot()
+        snapshot.teams[league.id] = [ESPN.Team(id: "6", name: "Dallas Cowboys", shortName: "Cowboys", nickname: "Cowboys", location: "Dallas", abbreviation: "DAL")]
+        snapshot.store(found, league: league, key: "day", at: .now)
+        #expect(snapshot.teams[league.id]?.first { $0.id == "6" }?.logo != nil)
+    }
+
+    @Test func logosLoadOnlyFromKnownImageHosts() {
+        #expect(SportsArtwork.isAllowed(URL(string: "https://a.espncdn.com/i/teamlogos/nfl/500/dal.png")!))
+        #expect(SportsArtwork.isAllowed(URL(string: "https://media.api-sports.io/basketball/teams/151.png")!))
+        #expect(!SportsArtwork.isAllowed(URL(string: "http://a.espncdn.com/i/teamlogos/nfl/500/dal.png")!))
+        #expect(!SportsArtwork.isAllowed(URL(string: "https://espncdn.com.example.net/logo.png")!))
+        #expect(!SportsArtwork.isAllowed(URL(string: "https://example.com/logo.png")!))
+    }
+
     @Test func scoreboardEventsDecodeStatusNetworksAndTimes() throws {
         let json = #"{"leagues":[{"logos":[{"href":"https://a.espncdn.com/i/teamlogos/leagues/500/nfl.png"}]}],"events":[{"id":"401","date":"2026-11-22T18:00Z","status":{"type":{"state":"pre","name":"STATUS_SCHEDULED"}},"competitions":[{"competitors":[{"homeAway":"home","team":{"id":"6","displayName":"Dallas Cowboys"}},{"homeAway":"away","team":{"id":"10","displayName":"Tennessee Titans"}}],"broadcasts":[{"names":["Fox"]}]}]},{"id":"402","date":"2026-11-23T01:20Z","competitions":[{"status":{"type":{"state":"post","name":"STATUS_POSTPONED"}},"competitors":[{"homeAway":"home","team":{"id":"9","displayName":"Green Bay Packers"}},{"homeAway":"away","team":{"id":"3","displayName":"Chicago Bears"}}],"broadcasts":[{"media":{"shortName":"NBC"}}]}]}]}"#
         let found = try ESPN.events(Data(json.utf8), league: league)

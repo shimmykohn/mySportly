@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// Teams you follow, leagues you added, and favorite channels.
+/// Teams you follow, leagues you added, movies and shows saved for later,
+/// and favorite channels.
 struct MyStuffView: View {
     @Environment(AppStore.self) private var store
     @State private var picking = false
 
     var body: some View {
-        let teams = store.followedTeams, leagues = store.addedLeagues, channels = store.favorites
+        let teams = store.followedTeams, leagues = store.addedLeagues, channels = store.favorites, later = store.watchLater
         List {
-            if teams.isEmpty && leagues.isEmpty && channels.isEmpty {
+            if teams.isEmpty && leagues.isEmpty && channels.isEmpty && later.isEmpty {
                 ContentUnavailableView {
                     Label("Nothing Here Yet", systemImage: "star")
                 } actions: {
@@ -35,6 +36,7 @@ struct MyStuffView: View {
                     }
                 }
             }
+            if !later.isEmpty { WatchLaterSection(items: later) }
             if !channels.isEmpty {
                 Section("Channels") {
                     ForEach(channels) { channel in

@@ -8,6 +8,7 @@ struct VODUpNext {
 /// Movies and shows: loading, progress and what to play.
 extension AppStore {
     func loadVOD(force: Bool = false) async {
+        await vod.setLanguages(vodLanguages)
         await vod.apply(aiResults.vod)
         let hadContent = vod.hasContent
         await vod.load(sources: sources, provider: provider, cache: cache, demo: demo, force: force)
@@ -92,6 +93,8 @@ extension AppStore {
         updated.watched = watched; updated.updated = .now
         if !watched { updated.position = 0 }
         try? personal.set(WatchProgress.key(item.itemID), updated)
+        // A watched movie leaves Watch Later.
+        if watched, item.kind == .movie, isInWatchLater(item.itemID) { removeFromWatchLater(item.itemID) }
     }
     /// The provider's own file, for another app to play.
     func externalMediaURL(_ item: WatchProgress) -> URL? {
@@ -115,4 +118,37 @@ extension AppStore {
 
     /// "Remove from Continue Watching".
     func clearProgress(_ item: WatchProgress) { try? personal.remove(WatchProgress.key(item.itemID)) }
+
+    // MARK: Languages
+
+    /// Which languages the Watch shelves show: the user's by default.
+    var vodLanguages: VODLanguages {
+        VODLanguages(choice: .init(saved: personal.value("preferences.vodLanguage", default: "")), preferred: languages)
+    }
+    func setVODLanguage(_ choice: VODLanguages.Choice) { set("preferences.vodLanguage", choice.saved) }
+
+    // MARK: Watch Later
+
+    private var savedWatchLater: [String: WatchLaterItem] {
+        let revision = personal.revision
+        if savedWatchLaterCache.revision == revision { return savedWatchLaterCache.items }
+        var all: [String: WatchLaterItem] = [:]
+        for key in personal.keys(prefix: "vod.later.") {
+            guard let item: WatchLaterItem = personal.value(key, default: nil) else { continue }
+            all[item.itemID] = item
+        }
+        savedWatchLaterCache = (revision, all)
+        return all
+    }
+    /// Saved movies and shows, newest first, without movies already watched.
+    var watchLater: [WatchLaterItem] {
+        let finished = Set(savedProgress.values.filter { $0.kind == .movie && $0.isFinished }.map(\.itemID))
+        return WatchLaterItem.list(Array(savedWatchLater.values), finished: finished)
+    }
+    func isInWatchLater(_ itemID: String) -> Bool { savedWatchLater[itemID] != nil }
+    func toggleWatchLater(_ item: WatchLaterItem) {
+        if isInWatchLater(item.itemID) { removeFromWatchLater(item.itemID) }
+        else { try? personal.set(WatchLaterItem.key(item.itemID), item) }
+    }
+    func removeFromWatchLater(_ itemID: String) { try? personal.remove(WatchLaterItem.key(itemID)) }
 }

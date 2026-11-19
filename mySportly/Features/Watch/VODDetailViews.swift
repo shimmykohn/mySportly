@@ -20,7 +20,10 @@ struct MovieDetailView: View {
                             tmdb?.ratingText ?? movie.rating.map { "★ \($0.formatted(.number.precision(.fractionLength(1))))" }])
             VStack(alignment: .leading, spacing: 20) {
                 PlayRow(progress: progress) { store.play(movie) } fromStart: { store.play(movie, fromStart: true) }
-                if let trailer = tmdb?.trailerURL { TrailerButton(url: trailer) }
+                HStack(spacing: 10) {
+                    WatchLaterButton(item: WatchLaterItem(movie))
+                    if let trailer = tmdb?.trailerURL { TrailerButton(url: trailer) }
+                }
                 if let plot = detail?.plot.nonEmpty ?? tmdb?.overview.nonEmpty { Text(plot).font(.body) }
                 if let director = detail?.director.nonEmpty { LabeledContent("Director", value: director).font(.subheadline) }
                 // TMDB's cast row takes the place of the provider's list.
@@ -104,7 +107,10 @@ struct SeriesDetailView: View {
                         store.play(upNext, of: show, in: detail, fromStart: true)
                     }
                 }
-                if let trailer = tmdb?.trailerURL { TrailerButton(url: trailer) }
+                HStack(spacing: 10) {
+                    WatchLaterButton(item: WatchLaterItem(show))
+                    if let trailer = tmdb?.trailerURL { TrailerButton(url: trailer) }
+                }
                 if let plot = show.plot.nonEmpty ?? tmdb?.overview.nonEmpty { Text(plot).font(.body) }
                 let versions = store.vod.versions(of: show)
                 if !versions.isEmpty {

@@ -30,13 +30,24 @@ import Observation
     private(set) var versions: [String: [String]] = [:]
     @ObservationIgnored private var hiddenCopies: [String: Movie] = [:]
     @ObservationIgnored private var hiddenShows: [String: Series] = [:]
+    /// Which languages the shelves show, and each title's language by ID.
+    @ObservationIgnored private var languages = VODLanguages()
+    @ObservationIgnored private var itemLanguages: [String: String] = [:]
+    /// Languages with titles in the catalog, most titles first.
+    private(set) var availableLanguages: [String] = []
+    /// Titles the language choice keeps off the shelves.
+    private(set) var hiddenByLanguage = (movies: 0, shows: 0)
+    @ObservationIgnored private var publishGeneration = 0
+    /// Positions in `movies` and `series` by ID, for posters that look one up.
+    @ObservationIgnored private var movieIndex: [String: Int] = [:]
+    @ObservationIgnored private var showIndex: [String: Int] = [:]
     /// Built the first time TMDB's titles are looked for, once per revision.
     @ObservationIgnored private var tmdbIndex: (revision: Int, movies: TMDBLibraryIndex<Movie>, shows: TMDBLibraryIndex<Series>)?
 
     var hasContent: Bool { !movies.isEmpty || !series.isEmpty }
 
-    func movie(_ id: String) -> Movie? { movies.first { $0.id == id } ?? hiddenCopies[id] }
-    func show(_ id: String) -> Series? { series.first { $0.id == id } ?? hiddenShows[id] }
+    func movie(_ id: String) -> Movie? { movieIndex[id].map { movies[$0] } ?? hiddenCopies[id] }
+    func show(_ id: String) -> Series? { showIndex[id].map { series[$0] } ?? hiddenShows[id] }
     /// The other copies of a movie, for "Other Versions".
     func versions(of movie: Movie) -> [Movie] { (versions[movie.id] ?? []).compactMap { hiddenCopies[$0] } }
     func versions(of show: Series) -> [Series] { (versions[show.id] ?? []).compactMap { hiddenShows[$0] } }
@@ -94,6 +105,16 @@ import Observation
         refreshProblem = failure != nil && !catalogs.isEmpty ? "Couldn’t refresh movies and shows. Showing the saved list." : nil
     }
 
+    /// Shows only titles in these languages (plus untagged ones, by default).
+    func setLanguages(_ languages: VODLanguages) async {
+        guard languages != self.languages else { return }
+        self.languages = languages
+        if !catalogs.isEmpty { await publish() }
+    }
+
+    /// A title's language code, or "" when nothing tags it.
+    func language(of itemID: String) -> String { itemLanguages[itemID] ?? "" }
+
     /// Rows and lists are built off the main actor; catalogs can hold 50,000+ titles.
     func apply(_ decisions: VODDecisions) async {
         guard decisions != self.decisions else { return }
@@ -101,23 +122,54 @@ import Observation
         if !catalogs.isEmpty { await publish() }
     }
 
+    private struct Built: Sendable {
+        var movies: [Movie], series: [Series], movieRows: [VODShelfRow<Movie>], seriesRows: [VODShelfRow<Series>], recent: [Movie]
+        var genres: [String: String], versions: [String: [String]], hiddenMovies: [String: Movie], hiddenSeries: [String: Series]
+        var languages: [String: String], available: [String], hidden: (movies: Int, shows: Int)
+        var movieIndex: [String: Int], showIndex: [String: Int]
+    }
+
     private func publish() async {
-        let catalogs = Array(catalogs.values), decisions = decisions
-        let built = await Task.detached(priority: .userInitiated) {
+        let catalogs = Array(catalogs.values), decisions = decisions, scope = languages
+        publishGeneration += 1
+        let generation = publishGeneration
+        let built = await Task.detached(priority: .userInitiated) { () -> Built in
             var movies = catalogs.flatMap(\.movies), series = catalogs.flatMap(\.series)
             for index in movies.indices { if let title = decisions.titles[movies[index].rawTitle] { movies[index].title = title } }
             for index in series.indices { if let title = decisions.titles[series[index].rawTitle] { series[index].title = title } }
-            let (shownMovies, movieCopies, hiddenMovies) = VODCopies.fold(movies, copies: decisions.copies)
-            let (shownSeries, seriesCopies, hiddenSeries) = VODCopies.fold(series, copies: decisions.copies)
+            let movieCategories = Dictionary(catalogs.map { ($0.sourceID, $0.movieCategories) }, uniquingKeysWith: { a, _ in a })
+            let seriesCategories = Dictionary(catalogs.map { ($0.sourceID, $0.seriesCategories) }, uniquingKeysWith: { a, _ in a })
+            // Each title's language, from its own tags or its folder's.
+            var language: [String: String] = [:]
+            let movieFolders = VODShelf.categoryNames(movies, categories: movieCategories)
+            let showFolders = VODShelf.categoryNames(series, categories: seriesCategories)
+            for movie in movies { language[movie.id] = VODLanguage.detect(category: movieFolders[movie.id] ?? "", title: movie.rawTitle) }
+            for show in series { language[show.id] = VODLanguage.detect(category: showFolders[show.id] ?? "", title: show.rawTitle) }
+            // A copy in the user's language stands for the others.
+            let (shownMovies, movieCopies, hiddenMovies) = VODCopies.fold(movies, copies: decisions.copies) { scope.rank(language[$0.id] ?? "") }
+            let (shownSeries, seriesCopies, hiddenSeries) = VODCopies.fold(series, copies: decisions.copies) { scope.rank(language[$0.id] ?? "") }
+            let movieShelf = shownMovies.filter { scope.includes(language[$0.id] ?? "") }
+            let seriesShelf = shownSeries.filter { scope.includes(language[$0.id] ?? "") }
             var genres: [String: String] = [:]
             for movie in movies { if let genre = decisions.genres[movie.rawTitle] { genres[movie.id] = genre } }
             for show in series { if let genre = decisions.genres[show.rawTitle] { genres[show.id] = genre } }
-            let movieCategories = Dictionary(catalogs.map { ($0.sourceID, $0.movieCategories) }, uniquingKeysWith: { a, _ in a })
-            let seriesCategories = Dictionary(catalogs.map { ($0.sourceID, $0.seriesCategories) }, uniquingKeysWith: { a, _ in a })
-            return (shownMovies, shownSeries, VODShelf.rows(shownMovies, categories: movieCategories), VODShelf.rows(shownSeries, categories: seriesCategories),
-                    VODShelf.recentMovies(shownMovies), genres, movieCopies.merging(seriesCopies) { a, _ in a }, hiddenMovies, hiddenSeries)
+            var counts: [String: Int] = [:]
+            for code in language.values where !code.isEmpty { counts[code, default: 0] += 1 }
+            let available = counts.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.map(\.key)
+            return Built(movies: shownMovies, series: shownSeries,
+                         movieRows: VODShelf.rows(movieShelf, categories: movieCategories), seriesRows: VODShelf.rows(seriesShelf, categories: seriesCategories),
+                         recent: VODShelf.recentMovies(movieShelf), genres: genres, versions: movieCopies.merging(seriesCopies) { a, _ in a },
+                         hiddenMovies: hiddenMovies, hiddenSeries: hiddenSeries, languages: language, available: available,
+                         hidden: (shownMovies.count - movieShelf.count, shownSeries.count - seriesShelf.count),
+                         movieIndex: Dictionary(shownMovies.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }),
+                         showIndex: Dictionary(shownSeries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }))
         }.value
-        (movies, series, movieRows, seriesRows, recentMovies, genres, versions, hiddenCopies, hiddenShows) = built
+        // A newer build (another language or answers) already started.
+        guard generation == publishGeneration else { return }
+        (movies, series, movieRows, seriesRows, recentMovies) = (built.movies, built.series, built.movieRows, built.seriesRows, built.recent)
+        (genres, versions, hiddenCopies, hiddenShows) = (built.genres, built.versions, built.hiddenMovies, built.hiddenSeries)
+        (itemLanguages, availableLanguages, hiddenByLanguage) = (built.languages, built.available, built.hidden)
+        (movieIndex, showIndex) = (built.movieIndex, built.showIndex)
         tmdbIndex = nil
         revision += 1
     }

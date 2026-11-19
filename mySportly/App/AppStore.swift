@@ -33,6 +33,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     @ObservationIgnored private var vodPersisted = Date.distantPast
     /// Saved progress decoded once per personal-data revision.
     @ObservationIgnored var savedProgressCache: (revision: Int, items: [String: WatchProgress]) = (-1, [:])
+    /// Watch Later, decoded once per personal-data revision.
+    @ObservationIgnored var savedWatchLaterCache: (revision: Int, items: [String: WatchLaterItem]) = (-1, [:])
     let openAI = OpenAIService()
     /// Artwork and details for movies and shows, with the user's token.
     let tmdb = TMDBService()

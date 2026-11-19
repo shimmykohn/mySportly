@@ -71,6 +71,8 @@ public enum ESPN {
     private struct RawTeam: Decodable {
         let id: String?; let displayName: String?; let shortDisplayName: String?; let name: String?; let location: String?
         let abbreviation: String?; let color: String?; let logos: [Logo]?
+        /// Scoreboards give one logo URL instead of the list.
+        let logo: String?
     }
 
     /// A league's teams from its `teams` feed.
@@ -88,7 +90,7 @@ public enum ESPN {
         let logos = raw.logos ?? []
         func logo(_ dark: Bool) -> URL? {
             logos.first { ($0.rel ?? []).contains("default") == !dark && ($0.rel ?? []).contains("dark") == dark }?.href.flatMap(URL.init(string:))
-                ?? (dark ? nil : logos.first?.href.flatMap(URL.init(string:)))
+                ?? (dark ? nil : (logos.first?.href ?? raw.logo).flatMap(URL.init(string:)))
         }
         return Team(id: id, name: name, shortName: raw.shortDisplayName ?? name, nickname: raw.name ?? "", location: raw.location ?? "",
                     abbreviation: raw.abbreviation ?? "", color: raw.color, logo: logo(false), darkLogo: logo(true))
@@ -172,7 +174,11 @@ public struct ESPNSnapshot: Codable, Sendable {
     public mutating func store(_ found: (events: [ESPN.Event], teams: [ESPN.Team], logo: URL?), league: ESPN.League, key: String, at date: Date) {
         for event in found.events { events[event.id] = event }
         var known = Dictionary((teams[league.id] ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        for team in found.teams where known[team.id] == nil { known[team.id] = team }
+        for team in found.teams {
+            if known[team.id] == nil { known[team.id] = team }
+            // A team first seen without a logo takes one from a later feed.
+            else if known[team.id]?.logo == nil, let logo = team.logo { known[team.id]?.logo = logo }
+        }
         teams[league.id] = Array(known.values)
         if let logo = found.logo { leagueLogos[league.id] = logo }
         fetched[key] = date.timeIntervalSince1970
@@ -234,6 +240,15 @@ extension SportsFollowCatalog {
             if let choice = choices.first(where: { $0.aliases.contains { GroupNames.normalized($0) == candidate } }) { return choice.name }
         }
         return team.name
+    }
+}
+
+/// Hosts the app loads team and league logos from. Logos come from public
+/// data files, so only these known image hosts are fetched.
+public enum SportsArtwork {
+    public static func isAllowed(_ url: URL) -> Bool {
+        guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
+        return host == "media.api-sports.io" || host == "espncdn.com" || host.hasSuffix(".espncdn.com")
     }
 }
 

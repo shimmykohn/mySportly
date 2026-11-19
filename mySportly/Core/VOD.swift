@@ -491,21 +491,35 @@ public struct VODShelfRow<Item: VODItem>: Sendable, Identifiable {
 public enum VODShelf {
     public static let recentlyAdded = "Recently Added"
 
-    /// One row per category, merged across sources by cleaned name, in the
-    /// providers' order; titles without a known category go last.
+    /// One row per shelf, merged across folders and sources: every Netflix
+    /// folder is one Netflix shelf, "EN - Action" and "FR - Action Movies"
+    /// one Action shelf. In the providers' order; titles without a known
+    /// category go last.
     public static func rows<Item: VODItem>(_ items: [Item], categories: [UUID: [VODCategory]]) -> [VODShelfRow<Item>] {
-        var order: [String] = [], names: [String: String] = [:]
+        var order: [String] = [], keys: [String: String] = [:], titles: [String: String] = [:]
         for (source, list) in categories.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
             for category in list {
-                let name = NameCleaning.local(category.name)
-                names["\(source.uuidString)|\(category.id)"] = name
-                if !order.contains(name) { order.append(name) }
+                let name = shelfName(category.name), key = shelfKey(name)
+                keys["\(source.uuidString)|\(category.id)"] = key
+                if titles[key] == nil { titles[key] = name; order.append(key) }
+                // A mixed-case spelling reads better than a provider's capitals.
+                else if titles[key] == titles[key]?.uppercased(), name != name.uppercased() { titles[key] = name }
             }
         }
         var grouped: [String: [Item]] = [:]
-        for item in items { grouped[names["\(item.sourceID.uuidString)|\(item.categoryID)"] ?? "Other", default: []].append(item) }
-        if grouped["Other"] != nil, !order.contains("Other") { order.append("Other") }
-        return order.compactMap { name in grouped[name].map { VODShelfRow(id: name, title: name, items: $0) } }
+        let other = shelfKey("Other")
+        for item in items { grouped[keys["\(item.sourceID.uuidString)|\(item.categoryID)"] ?? other, default: []].append(item) }
+        if grouped[other] != nil, titles[other] == nil { titles[other] = "Other"; order.append(other) }
+        return order.compactMap { key in grouped[key].map { VODShelfRow(id: titles[key] ?? key, title: titles[key] ?? key, items: $0) } }
+    }
+
+    /// Each item's folder name, for working out its language.
+    public static func categoryNames<Item: VODItem>(_ items: [Item], categories: [UUID: [VODCategory]]) -> [String: String] {
+        var names: [String: String] = [:]
+        for (source, list) in categories { for category in list { names["\(source.uuidString)|\(category.id)"] = category.name } }
+        var result: [String: String] = [:]
+        for item in items { result[item.id] = names["\(item.sourceID.uuidString)|\(item.categoryID)"] ?? "" }
+        return result
     }
 
     public static func recentMovies(_ movies: [Movie], limit: Int = 20) -> [Movie] {
@@ -543,14 +557,18 @@ public enum VODCopies {
     /// The items to show, each shown item's folded copies by ID, and the
     /// folded items by ID. Copies fold only within one source; the title the
     /// others point at stands for them, else the first one listed.
-    public static func fold<Item: VODItem & RawTitled>(_ items: [Item], copies: [String: String]) -> (shown: [Item], versions: [String: [String]], hidden: [String: Item]) {
+    /// `rank` picks the lead among copies (lower is better, e.g. a copy in
+    /// the user's language); ties go to the title the others point at.
+    public static func fold<Item: VODItem & RawTitled>(_ items: [Item], copies: [String: String], rank: (Item) -> Int = { _ in 0 }) -> (shown: [Item], versions: [String: [String]], hidden: [String: Item]) {
         guard !copies.isEmpty else { return (items, [:], [:]) }
         var groups: [String: [Item]] = [:]
         for item in items { groups[item.sourceID.uuidString + "|" + (copies[item.rawTitle] ?? item.rawTitle), default: []].append(item) }
         var shownIDs = Set<String>(), versions: [String: [String]] = [:], hidden: [String: Item] = [:]
         for (key, members) in groups {
             let root = key.split(separator: "|", maxSplits: 1).last.map(String.init) ?? ""
-            let lead = members.first { $0.rawTitle == root } ?? members[0]
+            let best = members.map(rank).min() ?? 0
+            let leads = members.filter { rank($0) == best }
+            let lead = leads.first { $0.rawTitle == root } ?? leads[0]
             shownIDs.insert(lead.id)
             let others = members.filter { $0.id != lead.id }
             if !others.isEmpty { versions[lead.id] = others.map(\.id) }
