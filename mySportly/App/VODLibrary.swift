@@ -78,8 +78,13 @@ import Observation
             do {
                 let secrets = try KeychainStore.credentials(source.id) ?? SourceSecrets()
                 let fresh = try await provider.vodCatalog(source, secrets: secrets)
-                catalogs[source.id] = fresh
-                try? await cache.saveVOD(fresh)
+                // A provider hiccup (a busy account, an error page) can come
+                // back as an empty list; keep the saved one instead of
+                // blanking the shelf, and try again next time.
+                let kept = VODCatalog.keepingSaved(fresh: fresh, saved: catalogs[source.id])
+                catalogs[source.id] = kept.catalog
+                if kept.complete { try? await cache.saveVOD(kept.catalog) }
+                else { failure = "Your provider sent an empty list. Showing the saved one." }
             } catch is CancellationError { break }
             catch { failure = (error as? LocalizedError)?.errorDescription ?? "Couldn’t refresh movies and shows." }
         }

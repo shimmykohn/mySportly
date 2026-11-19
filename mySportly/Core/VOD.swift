@@ -103,6 +103,25 @@ public struct SeriesDetail: Codable, Hashable, Sendable {
     public var episodes: [Episode] { seasons.flatMap(\.episodes) }
 }
 
+extension VODCatalog {
+    /// A fresh fetch, except that a movie or show list that came back empty
+    /// while the saved copy had titles keeps the saved list and its date, so
+    /// the next load asks again. `complete` is false when anything was kept.
+    public static func keepingSaved(fresh: VODCatalog, saved: VODCatalog?) -> (catalog: VODCatalog, complete: Bool) {
+        guard let saved else { return (fresh, true) }
+        var catalog = fresh, complete = true
+        if fresh.movies.isEmpty, !saved.movies.isEmpty {
+            catalog.movies = saved.movies; catalog.movieCategories = saved.movieCategories; complete = false
+        }
+        if fresh.series.isEmpty, !saved.series.isEmpty {
+            catalog.series = saved.series; catalog.seriesCategories = saved.seriesCategories; complete = false
+        }
+        // Asked again in about an hour rather than on every visit.
+        if !complete { catalog.fetched = max(saved.fetched, fresh.fetched - 23 * 3_600) }
+        return (catalog, complete)
+    }
+}
+
 /// One source's movies and shows.
 public struct VODCatalog: Codable, Sendable {
     public var sourceID: UUID

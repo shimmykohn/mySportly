@@ -114,6 +114,9 @@ struct WatchView: View {
                 ForEach(continuing) { ContinueCard(item: $0) }
             }
         }
+        if library.hasContent ? (shelf == .movies ? library.movieRows.isEmpty : library.seriesRows.isEmpty) : !Downloads.shared.records.isEmpty {
+            shelfStatus(library)
+        }
         switch shelf {
         case .movies:
             if !library.recentMovies.isEmpty {
@@ -133,6 +136,32 @@ struct WatchView: View {
                 } all: { VODGrid(title: row.title, shows: row.items) }
             }
         }
+    }
+
+    /// This side has nothing to show while the other may: say why, and offer a refresh.
+    @ViewBuilder private func shelfStatus(_ library: VODLibrary) -> some View {
+        Group {
+            switch library.state {
+            case .idle, .loading: ProgressView("Loading movies and shows…")
+            case .failed(let message):
+                ContentUnavailableView {
+                    Label("Couldn’t Load", systemImage: "wifi.exclamationmark")
+                } description: { Text(message) } actions: {
+                    Button("Try Again") { Task { await store.loadVOD(force: true) } }.buttonStyle(.bordered)
+                }
+            case .ready:
+                ContentUnavailableView {
+                    Label(shelf == .movies ? "No Movies" : "No TV Shows", systemImage: "film.stack")
+                } description: {
+                    Text("Your provider didn’t send any \(shelf == .movies ? "movies" : "shows") this time.")
+                } actions: {
+                    Button("Refresh") { Task { await store.loadVOD(force: true) } }.buttonStyle(.bordered)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .accessibilityIdentifier("watch-shelf-status")
     }
 
     @ViewBuilder private var emptyState: some View {

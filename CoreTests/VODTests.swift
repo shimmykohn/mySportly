@@ -168,3 +168,21 @@ struct VODFilterTests {
         #expect(VODFilter.decades(action + drama) == [2000, 1990])
     }
 }
+
+@Suite struct VODRefreshTests {
+    @Test func anEmptyListFromTheProviderKeepsTheSavedOne() {
+        let source = UUID(), then = Date(timeIntervalSince1970: 1_000_000), now = then + 2 * 86_400
+        var saved = VODCatalog(sourceID: source, fetched: then)
+        saved.movies = [Movie(id: "m", sourceID: source, providerID: "1", rawTitle: "Dune", title: "Dune")]
+        saved.series = [Series(id: "s", sourceID: source, providerID: "2", rawTitle: "Lost", title: "Lost")]
+        var fresh = VODCatalog(sourceID: source, fetched: now)
+        fresh.series = [Series(id: "s2", sourceID: source, providerID: "3", rawTitle: "Lost 2", title: "Lost 2")]
+        let kept = VODCatalog.keepingSaved(fresh: fresh, saved: saved)
+        #expect(!kept.complete && kept.catalog.movies.map(\.id) == ["m"] && kept.catalog.series.map(\.id) == ["s2"])
+        // Asked again within about an hour, not on every visit.
+        #expect(kept.catalog.isStale(at: now + 3_700) && !kept.catalog.isStale(at: now + 60))
+        fresh.movies = [Movie(id: "m2", sourceID: source, providerID: "4", rawTitle: "Up", title: "Up")]
+        #expect(VODCatalog.keepingSaved(fresh: fresh, saved: saved).complete)
+    }
+}
+
