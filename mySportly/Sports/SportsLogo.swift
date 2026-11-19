@@ -15,7 +15,7 @@ actor SportsLogoCache {
         self.directory = directory; self.session = session
     }
     func image(url: URL, pixels: Int) async -> CGImage? {
-        guard url.scheme == "https", url.host == "media.api-sports.io" else { return nil }
+        guard SportsArtwork.isAllowed(url) else { return nil }
         let size = min(256, max(32, pixels))
         let hash = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
         let key = "\(hash)-\(size)"

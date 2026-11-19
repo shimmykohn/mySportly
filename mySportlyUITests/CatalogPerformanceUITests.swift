@@ -13,14 +13,14 @@ import UIKit
     }
     func testSavedCatalogNavigationAcrossTheApp() throws {
         let app = try openSavedCatalog()
-        app.selectMainTab("Guide")
+        app.openGuide()
         app.selectLineup("All Channels")
         app.buttons["Guide Filters"].tap()
         let listings = app.switches["Only Channels with Listings"].firstMatch
         if listings.value as? String == "1" { listings.tap() }
         app.buttons["close-guide-options"].tap()
         defer {
-            app.terminate(); app.launch(); app.selectMainTab("Guide"); app.selectLineup("My Lineup")
+            app.terminate(); app.launch(); app.openGuide(); app.selectLineup("My Lineup")
             app.buttons["Guide Filters"].tap()
             let listings = app.switches["Only Channels with Listings"].firstMatch
             if listings.value as? String == "0" { listings.tap() }
@@ -74,9 +74,9 @@ import UIKit
 
     func testSavedCatalogSearchResponseTime() throws {
         let app = try openSavedCatalog()
-        app.selectMainTab("Guide")
+        app.openGuide()
         app.selectLineup("All Channels")
-        defer { app.terminate(); app.launch(); app.selectMainTab("Guide"); app.selectLineup("My Lineup") }
+        defer { app.terminate(); app.launch(); app.openGuide(); app.selectLineup("My Lineup") }
         let start = Date()
         app.selectMainTab("Search")
         let field = app.searchFields.firstMatch

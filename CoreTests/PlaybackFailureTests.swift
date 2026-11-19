@@ -24,4 +24,10 @@ import Testing
         #expect(PlaybackFailure(error: URLError(.timedOut)).shouldRetry)
         #expect(PlaybackFailure(error: nil).httpStatus == nil)
     }
+    @Test func streamLimitCodesSayTheAccountIsBusy() {
+        let failure = PlaybackFailure(error: NSError(domain: "CoreMediaErrorDomain", code: -1, userInfo: ["NSDescription": "HTTP 460: error"]))
+        #expect(failure.httpStatus == 460)
+        #expect(failure.message.contains("busy"))
+        #expect(!failure.shouldRetry, "Retrying at once would only hit the limit again")
+    }
 }

@@ -28,10 +28,8 @@ import Observation
         refresh()
     }
 
-    func groupModel() -> OpenAIGroupModel? {
-        guard !blocked, let key = key() else { return nil }
-        return OpenAIGroupModel(key: key)
-    }
+    /// The key for a background job, unless a credential or quota failure paused AI.
+    func activeKey() -> String? { blocked ? nil : key() }
 
     /// Interprets a search the local matcher couldn't. Nil on any failure or timeout.
     func interpret(_ query: String, teams: [String], leagues: [String], languages: [String]) async -> SearchIntent? {
@@ -50,7 +48,7 @@ import Observation
         if error is CancellationError { return }
         lastProblem = (error as? LocalizedError)?.errorDescription ?? "OpenAI couldn’t finish. It will try again later."
         switch error {
-        case GroupDecisionFailure.credentials, GroupDecisionFailure.quota, DecisionsFailure.credentials, DecisionsFailure.quota: blocked = true
+        case DecisionsFailure.credentials, DecisionsFailure.quota: blocked = true
         default: break
         }
     }

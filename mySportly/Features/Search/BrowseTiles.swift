@@ -24,6 +24,10 @@ struct BrowseTiles: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            Button { store.selectedTab = .watch } label: {
+                Tile(title: "Movies & TV") { Image(systemName: "play.rectangle.on.rectangle.fill").foregroundStyle(.indigo) }
+            }
+            .accessibilityIdentifier("browse-watch")
             ForEach(Self.categories, id: \.0) { title, symbol, tint in
                 Button { destination = .category(title) } label: { Tile(title: title) { Image(systemName: symbol).foregroundStyle(tint) } }
                     .accessibilityIdentifier("browse-\(title)")
@@ -66,7 +70,12 @@ struct BrowseCategoryView: View {
         List {
             if let channels {
                 if channels.isEmpty { ContentUnavailableView("No \(category) Channels", systemImage: "tv") }
-                ForEach(channels.prefix(limit)) { PlayableChannelRow(channel: $0) }
+                ForEach(store.collapseFamilies(Array(channels.prefix(limit))) { $0 }) { entry in
+                    switch entry {
+                    case .single(let channel): PlayableChannelRow(channel: channel)
+                    case .family(let name, let members): ChannelFamilyRow(name: name, channels: members)
+                    }
+                }
                 if channels.count > limit { Button("Show More") { limit += 100 } }
             } else {
                 ProgressView().frame(maxWidth: .infinity)
@@ -78,7 +87,9 @@ struct BrowseCategoryView: View {
             var request = ChannelBrowseRequest()
             request.category = category; request.audience = store.audience
             request.collapseVariants = true; request.excludeInactive = true; request.ranked = true
-            channels = (try? await catalogWork { try directory.browse(request) }) ?? []
+            // Favorites, your languages and regions, interests and history first.
+            let preferences = store.recommendationPreferences
+            channels = (try? await catalogWork { try directory.browse(request, preferences: preferences) }) ?? []
         }
     }
 }

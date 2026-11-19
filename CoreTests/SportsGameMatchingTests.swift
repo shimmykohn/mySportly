@@ -90,12 +90,36 @@ struct SportsGameMatchingTests {
             GuideProgram(id: "d", sourceID: source, guideID: "sports", title: "Cowboys vs Packers vs Giants", start: start, end: start + 3600)
         ]
         let query = try CatalogQueryIndex(channels: [channel], programs: programs)
-        let result = try query.guideGames(reference: index(), refreshed: [source: start], at: start)
+        var unscheduled = try index().catalog; unscheduled.games = []
+        let result = try query.guideGames(reference: SportsDataIndex(unscheduled), refreshed: [source: start], at: start)
         #expect(result.index.games.count == 2)
         #expect(Set(result.links.values.flatMap { $0.compactMap(\.programID) }) == [source.uuidString + "|a", source.uuidString + "|b"])
         let parser = GuideGameParser(reference: try index())
         #expect(parser.opponents(title: "Giants vs Cardinals", context: "MLB") == nil)
         #expect(parser.opponents(title: "Cowboys and Packers discuss the draft", context: "NFL") == nil)
+    }
+    @Test func scheduledGamesAdoptGuideFeedsAndGetNetworkChannels() throws {
+        var scheduled = SportsGame(id: "espn.1", leagueID: "nfl", homeID: "gb", awayID: "dal", timestamp: start.timeIntervalSince1970)
+        scheduled.networks = ["Fox"]
+        var reference = try index().catalog; reference.games = [scheduled]
+        let channels = [Channel(id: "sports", sourceID: source, name: "Sports", group: "NFL", guideID: "sports"),
+                        Channel(id: "fox", sourceID: source, name: "US| FOX HD", group: "USA"),
+                        Channel(id: "fox5", sourceID: source, name: "US| FOX 5 New York", group: "USA")]
+        let programs = [GuideProgram(id: "a", sourceID: source, guideID: "sports", title: "Cowboys at Packers", start: start + 300, end: start + 3 * 3600, categories: ["NFL"])]
+        let query = try CatalogQueryIndex(channels: channels, programs: programs)
+        let result = try query.guideGames(reference: SportsDataIndex(reference), refreshed: [source: start], at: start)
+        // The guide's game takes the schedule's identity instead of becoming a second one.
+        #expect(result.index.games.keys.sorted() == ["espn.1"])
+        #expect(result.index.games["espn.1"]?.guideEnd == (start + 3 * 3600).timeIntervalSince1970)
+        let links = result.links["espn.1", default: []]
+        #expect(Set(links.map(\.channelID)) == ["sports", "fox"])
+        #expect(links.first { $0.channelID == "fox" }?.evidence == "TV network")
+    }
+    @Test func networkNamesMatchChannelNames() {
+        #expect(SportsNetworks.key("US| ESPN 2 HD") == SportsNetworks.key("ESPN2"))
+        #expect(SportsNetworks.key("USA Network") == SportsNetworks.key("USA Net"))
+        #expect(SportsNetworks.key("CBS (East)") == SportsNetworks.key("CBS"))
+        #expect(SportsNetworks.key("FOX 5 New York") != SportsNetworks.key("Fox"))
     }
     @Test func reusedChannelDateCannotOverrideToday() throws {
         let matcher = SportsGameMatcher(index: try index())

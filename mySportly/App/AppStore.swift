@@ -3,7 +3,13 @@ import Observation
 import SwiftUI
 import os
 
-enum AppTab: String, CaseIterable, Codable, Hashable { case home = "Home", guide = "Guide", myStuff = "My Stuff", search = "Search" }
+enum AppTab: String, CaseIterable, Codable, Hashable { case home = "Home", myStuff = "My Stuff", watch = "Watch", search = "Search" }
+/// A page pushed on Home's stack: the Guide, or one a context menu opens.
+enum HomeDestination: Hashable {
+    case guide
+    case program(GuideProgram, Channel)
+    case game(String)
+}
 struct ChannelGroup: Codable, Identifiable, Hashable { var id = UUID(); var name: String; var channelIDs: [String] }
 struct AppNotice: Identifiable { let id = UUID(); var title: String; var message: String }
 
@@ -15,7 +21,23 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     #endif
     let personal: PersonalStore
     let playback = PlaybackController()
+    /// The second game in two-up viewing; muted unless the user moves the sound to it.
+    let secondPlayback = PlaybackController(secondary: true)
+    private(set) var secondGameID: String?
+    /// Movies and shows (the Watch tab).
+    let vod = VODLibrary()
+    /// The movie or episode playing, with its live position.
+    private(set) var nowPlayingVOD: WatchProgress?
+    /// The episode after the one playing, when known.
+    var vodUpNext: VODUpNext?
+    @ObservationIgnored private var vodPersisted = Date.distantPast
+    /// Saved progress decoded once per personal-data revision.
+    @ObservationIgnored var savedProgressCache: (revision: Int, items: [String: WatchProgress]) = (-1, [:])
+    /// Watch Later, decoded once per personal-data revision.
+    @ObservationIgnored var savedWatchLaterCache: (revision: Int, items: [String: WatchLaterItem]) = (-1, [:])
     let openAI = OpenAIService()
+    /// Artwork and details for movies and shows, with the user's token.
+    let tmdb = TMDBService()
     let sportsData = SportsDataStore()
     private(set) var gameLinks: [String: [SportsFeedLink]] = [:]
     /// Home's games; restored from the launch snapshot, replaced by guide matching.
@@ -25,10 +47,10 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private(set) var matchingGames = false
     private(set) var activeSportsGameID: String?
     @ObservationIgnored private var sportsMatchTask: Task<Void, Never>?
-    private let cache = CatalogCache()
+    let cache = CatalogCache()
     private(set) var launchTimeline = LaunchTimeline()
     @ObservationIgnored private let launchSignposter = OSSignposter(subsystem: "app.iska.mysportly", category: "Launch")
-    private let provider = ProviderClient()
+    let provider = ProviderClient()
     private(set) var catalog = CatalogSnapshot()
     private(set) var channels: [Channel] = []
     private(set) var channelIndex: [String: Channel] = [:]
@@ -79,7 +101,17 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     @ObservationIgnored private var organizationRevision = -1
     @ObservationIgnored private var organizationUsesCachedAI = true
     private var importTask: Task<Bool, Never>?
-    private var organizeTask: Task<Void, Never>?
+    /// Feed merges, detected games and clean names (see `AIJobs.swift`).
+    var aiResults = AIResults()
+    /// What the AI jobs are doing right now, for Settings → OpenAI. Nil when idle.
+    var aiActivity: String?
+    /// How far the current AI step is, 0...1, for Home's progress pill.
+    var aiFraction: Double?
+    /// What the last AI run changed, shown briefly on Home.
+    var aiSummary: String?
+    @ObservationIgnored var aiJobsTask: Task<Void, Never>?
+    @ObservationIgnored private var displayNames: [String: String] = [:]
+    @ObservationIgnored private var derivedVariants: [String: [String]] = [:]
     private var importRequiresExistingSource = false
     private(set) var refreshingSource = false
     private var loaded = false
@@ -87,6 +119,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     private(set) var refreshBatchRunning = false
     private(set) var refreshMessage: String?
     var searchRequest: String?
+    var homeDestination: HomeDestination?
     var demo = false
     private var attemptedRestores = Set<UUID>()
 
@@ -98,6 +131,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         launchTimeline.mark(.storeCreated, at: created)
         playback.quality = StreamQuality(rawValue: personal.value("preferences.streamQuality", default: "Auto")) ?? .automatic
         playback.onFailure = { [weak self] in self?.offerAlternate() }
+        playback.onProgress = { [weak self] position, duration, final in self?.vodProgressed(position, duration, final: final) }
         sportsData.onUpdate = { [weak self] in self?.matchSportsGames() }
         if !inMemory && registerBackground {
             backgroundRefresh.register(store: self)
@@ -192,7 +226,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             print("[Launch] seeded synthetic catalog")
         }
         #endif
-        Task { await sportsData.load() }
+        Task { await sportsData.load(); refreshSchedules() }
         // First frame: the small launch snapshot. The full catalog, cloud
         // status and network work all follow once Home is interactive.
         let snapshotRead = launchSignposter.beginInterval("snapshot")
@@ -213,6 +247,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         launchTimeline.mark(.catalogDecoded)
         let prepare = launchSignposter.beginInterval("prepare")
         preparedStages = await cache.loadPreparedStages()
+        aiResults = await cache.loadAIResults() ?? AIResults()
+        resetDisplayNames()
         rebuild(force: true)
         await waitForCatalog()
         launchSignposter.endInterval("prepare", prepare)
@@ -268,7 +304,22 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
                                  favorites: favorites.map { HomeChannel(channelID: $0.id, program: now(on: $0)) }, at: clock)
     }
 
+    /// Home's On Now shelf: live programs from the head of the lineup, beyond
+    /// the favorites Your Channels already shows. Bounded so Home stays cheap.
+    var homeOnNow: [HomeChannel] {
+        var seen = Set(favorites.map(\.id)), programs = Set<String>(), result: [HomeChannel] = []
+        for channel in lineup.prefix(100) where result.count < 12 && seen.insert(channel.id).inserted {
+            guard let program = now(on: channel), !ListingAvailability.isPlaceholderProgram(program.title),
+                  programs.insert(program.id).inserted else { continue }
+            result.append(HomeChannel(channelID: channel.id, program: program))
+        }
+        return result
+    }
+
     func isFollowing(_ team: SportsTeam) -> Bool { homeFollows.teamIDs.contains(team.libraryItem.id) }
+    /// Fetches what's due from ESPN for the current follows.
+    func refreshSchedules() { sportsData.refresh(follows: homeFollows) }
+
     func toggleFollow(_ team: SportsTeam) {
         if isFollowing(team) { unfollow(team.libraryItem) } else { follow(team.libraryItem) }
     }
@@ -348,7 +399,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func rebuild(force: Bool = false) {
         let active = Set(sources.map(\.id))
         if importRequiresExistingSource, let importingSource, !active.contains(importingSource) { cancelImport() }
-        if let source = playback.channel?.sourceID, !active.contains(source) { playback.stop() }
+        if let source = secondPlayback.channel?.sourceID, !active.contains(source) { stopSecond() }
+        if let source = playback.channel?.sourceID, !active.contains(source) { stopPlayback() }
         guard force || requestedPersonalRevision != personal.catalogRevision else { return }
         requestedPersonalRevision = personal.catalogRevision
         queryIndexTask?.cancel()
@@ -357,12 +409,21 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         let id = UUID(); preparationID = id
         preparingCatalog = true
         let channels = catalog.channels, programs = catalog.programs, overrides = personal.snapshotValues(), guideChannels = catalog.guideChannels, stages = preparedStages
+        let mergedPairs = aiResults.mergedPairs
         queryIndexTask = Task { [weak self] in
             do {
-                let prepared = try await catalogWork {
-                    try PreparedCatalog(channels: channels, programs: programs, activeSources: active, overrides: overrides, guideChannels: guideChannels, stages: stages)
+                let (prepared, groups) = try await catalogWork {
+                    // Duplicate feeds: exact local groups plus confirmed AI pairs.
+                    // The user's own overrides (a manual split) win.
+                    let present = Set(channels.lazy.filter { active.contains($0.sourceID) }.map(\.id))
+                    let groups = FeedMerging.groups(strict: FeedMerging.strictGroups(channels.filter { active.contains($0.sourceID) }), pairs: mergedPairs, present: present)
+                    let merged = AIResults.variantOverrides(groups).merging(overrides) { _, personal in personal }
+                    return (try PreparedCatalog(channels: channels, programs: programs, activeSources: active, overrides: merged, guideChannels: guideChannels, stages: stages), groups)
                 }
                 guard !Task.isCancelled, let self, self.preparationID == id else { return }
+                var derived: [String: [String]] = [:]
+                for group in groups { for member in group { derived[member] = group } }
+                self.derivedVariants = derived
                 self.directory = prepared.directory
                 self.channels = prepared.directory.channels
                 self.channelIndex = prepared.channelsByID
@@ -447,7 +508,20 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     }
 
     func key(_ channel: Channel, _ field: String) -> String { "channel.\(channel.id).\(field)" }
-    func name(_ channel: Channel) -> String { let custom: String = personal.value(key(channel, "name"), default: ""); return custom.isEmpty ? channel.name : custom }
+    func name(_ channel: Channel) -> String {
+        let custom: String = personal.value(key(channel, "name"), default: "")
+        return custom.isEmpty ? displayName(channel.name) : custom
+    }
+    /// The provider name tidied by local rules or the AI job, memoized.
+    func displayName(_ raw: String) -> String {
+        // Reading `aiResults` first keeps views observing it, so new names show.
+        let results = aiResults
+        if let cached = displayNames[raw] { return cached }
+        let value = results.displayName(raw)
+        displayNames[raw] = value
+        return value
+    }
+    func resetDisplayNames() { displayNames = [:] }
     func flag(_ channel: Channel, _ field: String) -> Bool { personal.value(key(channel, field), default: false) }
     func language(_ channel: Channel) -> String { personal.value(key(channel, "language"), default: directory?.metadata[channel.id]?.language ?? channel.language) }
     func region(_ channel: Channel) -> String { personal.value(key(channel, "region"), default: directory?.metadata[channel.id]?.region ?? channel.region) }
@@ -602,7 +676,9 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     }
     func removeSource(_ source: TVSource) async {
         if importingSource == source.id { cancelImport(); _ = await importTask?.value }
-        if playback.channel?.sourceID == source.id { playback.stop() }
+        if secondPlayback.channel?.sourceID == source.id { stopSecond() }
+        if playback.channel?.sourceID == source.id { stopPlayback() }
+        await vod.forget(source.id, cache: cache)
         do {
             try personal.remove("source.\(source.id)")
             rebuild()
@@ -633,32 +709,122 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
             }
             activeSportsGameID = gameID
             playback.play(chosen, url: url, title: now(on: chosen)?.title, preferredLanguage: personal.value("preferences.audioLanguage", default: languages.first ?? "en"), alternates: alternates)
+            nowPlayingVOD = nil; vodUpNext = nil
             if usesHistory { try personal.set("history.\(chosen.id)", Date.now) }
             if !showPlayer { playerSourceID = zoomSource }
             showPlayer = true
         } catch { inform("Playback unavailable", safeError(error)) }
     }
-    /// The player's title: the game, else the current program, else the channel.
-    var playerTitle: String {
-        guard let channel = playback.channel else { return "" }
-        if let gameID = activeSportsGameID, let game = game(gameID) {
-            let teams = sportsData.index.teams.isEmpty ? homeSports.teams : sportsData.index.teams
-            if let away = teams[game.awayID] ?? homeSports.teams[game.awayID], let home = teams[game.homeID] ?? homeSports.teams[game.homeID] {
-                return "\(away.libraryItem.name) at \(home.libraryItem.name)"
-            }
+    // MARK: Two-up viewing
+
+    /// Opens a second stream under the first. Its sound starts off; the first keeps playing.
+    func playSecond(_ channel: Channel, gameID: String? = nil) {
+        do {
+            let preferred: String = personal.value(key(channel, "preferredVariant"), default: channel.id)
+            let chosen = gameID == nil ? (channelIndex[preferred] ?? channel) : channel
+            guard chosen.id != playback.channel?.id else { inform("Already playing", "Choose a different game or channel."); return }
+            guard sources.contains(where: { $0.id == chosen.sourceID }) else { throw CatalogError.rejected }
+            let secrets = try KeychainStore.credentials(chosen.sourceID) ?? SourceSecrets()
+            let url = try provider.playbackURL(chosen, secrets: secrets)
+            secondGameID = gameID
+            secondPlayback.play(chosen, url: url, title: now(on: chosen)?.title, preferredLanguage: personal.value("preferences.audioLanguage", default: languages.first ?? "en"))
+            focusSound(onSecond: false)
+        } catch { inform("Playback unavailable", safeError(error)) }
+    }
+    func watchSecondGame(_ game: SportsGame) {
+        let saved: String = personal.value("sports.feed.\(game.id)", default: "")
+        let available = feeds(for: game.id, playableOnly: true).filter { $0.id != playback.channel?.id }
+        guard let chosen = available.first(where: { $0.id == saved }) ?? available.first else {
+            inform("No stream available now", "This game has no other matching feed in your lineup."); return
         }
+        playSecond(chosen, gameID: game.id)
+    }
+    var watchingTwo: Bool { secondPlayback.channel != nil }
+    var soundOnSecond: Bool { watchingTwo && !secondPlayback.muted }
+    /// Two-up viewing plays one sound at a time.
+    func focusSound(onSecond: Bool) {
+        let second = onSecond && watchingTwo
+        playback.setMuted(second); secondPlayback.setMuted(!second)
+    }
+    func stopSecond() { secondPlayback.stop(); secondGameID = nil; playback.setMuted(false) }
+    func stopPlayback() { stopSecond(); playback.stop(); nowPlayingVOD = nil; vodUpNext = nil }
+
+    // MARK: Movies and episodes
+
+    /// Plays a movie or episode from `startAt` (nil: the beginning).
+    func playVOD(_ item: WatchProgress, startAt: Double?, upNext: VODUpNext? = nil) {
+        do {
+            // A downloaded copy plays from this device, even offline.
+            let saved = Downloads.shared.file(for: item.itemID)
+            guard saved != nil || demo || sources.contains(where: { $0.id == item.sourceID }) else { throw CatalogError.rejected }
+            let url = try saved ?? (demo ? SampleVOD.streamURL
+                : provider.vodURL(kind: item.kind, providerID: item.providerID, container: VODFormat.requested(item.container),
+                                  secrets: KeychainStore.credentials(item.sourceID) ?? SourceSecrets()))
+            if watchingTwo { stopSecond() }
+            let channel = Channel(id: item.itemID, sourceID: item.sourceID, name: item.title, logo: item.artwork)
+            playback.play(channel, url: url, title: item.title, preferredLanguage: personal.value("preferences.audioLanguage", default: languages.first ?? "en"),
+                          live: false, startAt: startAt)
+            var started = item
+            started.updated = .now; started.watched = false
+            if startAt == nil { started.position = 0 }
+            activeSportsGameID = nil
+            nowPlayingVOD = started; vodUpNext = upNext
+            persistVOD(started)
+            if !showPlayer { playerSourceID = nil }
+            showPlayer = true
+        } catch { inform("Playback unavailable", safeError(error)) }
+    }
+
+    private func vodProgressed(_ position: Double, _ duration: Double, final: Bool) {
+        guard var item = nowPlayingVOD, playback.channel?.id == item.itemID else { return }
+        item.position = position; item.duration = duration; item.updated = .now
+        if playback.reachedEnd { item.watched = true }
+        nowPlayingVOD = item
+        // Personal data syncs; write on pause, stop and end, else every five minutes.
+        if final || Date.now.timeIntervalSince(vodPersisted) >= 300 { persistVOD(item) }
+    }
+    func flushVODProgress() {
+        playback.reportProgress()
+    }
+    private func persistVOD(_ item: WatchProgress) {
+        vodPersisted = .now
+        try? personal.set(WatchProgress.key(item.itemID), item)
+    }
+    /// Live games to add as the second stream, excluding what's already playing.
+    var secondGameChoices: [HomeGame] {
+        let content = homeContent
+        let live = (content.teamGames + content.leagueRows.flatMap(\.games)).filter { $0.state == .live && $0.id != activeSportsGameID }
+        var seen = Set<String>()
+        return live.filter { seen.insert($0.id).inserted }
+    }
+
+    /// The player's title: the game, else the current program, else the channel.
+    var playerTitle: String { nowPlayingVOD?.title ?? watchTitle(playback.channel, gameID: activeSportsGameID) }
+    /// "Channel · League" for games, else the channel name when the title is a program.
+    var playerSubtitle: String { nowPlayingVOD.map(\.subtitle) ?? watchSubtitle(playback.channel, gameID: activeSportsGameID) }
+    var secondTitle: String { watchTitle(secondPlayback.channel, gameID: secondGameID) }
+    var secondSubtitle: String { watchSubtitle(secondPlayback.channel, gameID: secondGameID) }
+
+    func watchTitle(_ channel: Channel?, gameID: String?) -> String {
+        guard let channel else { return "" }
+        if let gameID, let game = game(gameID), let title = gameTitle(game) { return title }
         return now(on: channel)?.title ?? name(channel)
     }
-    /// "Channel · League" for games, else the channel name when the title is a program.
-    var playerSubtitle: String {
-        guard let channel = playback.channel else { return "" }
-        let league = activeSportsGameID.flatMap { game($0) }.flatMap { sportsData.index.leagues[$0.leagueID] ?? homeSports.leagues[$0.leagueID] }?.name
-        let title = playerTitle
+    func watchSubtitle(_ channel: Channel?, gameID: String?) -> String {
+        guard let channel else { return "" }
+        let league = gameID.flatMap { game($0) }.flatMap { sportsData.index.leagues[$0.leagueID] ?? homeSports.leagues[$0.leagueID] }?.name
+        let title = watchTitle(channel, gameID: gameID)
         return [title == name(channel) ? nil : name(channel), league].compactMap { $0 }.joined(separator: " · ")
+    }
+    /// "Away at Home", when both teams are known.
+    func gameTitle(_ game: SportsGame) -> String? {
+        let teams = sportsData.index.teams.isEmpty ? homeSports.teams : sportsData.index.teams
+        guard let away = teams[game.awayID] ?? homeSports.teams[game.awayID], let home = teams[game.homeID] ?? homeSports.teams[game.homeID] else { return nil }
+        return "\(away.libraryItem.name) at \(home.libraryItem.name)"
     }
     func previousChannel() { if let previous = playback.previous, let channel = channelIndex[previous.id] { play(channel) } }
     func variants(of channel: Channel) -> [Channel] {
-        let group: [String] = personal.value(key(channel, "variants"), default: playbackAlternatives[channel.id] ?? [channel.id])
+        let group: [String] = personal.value(key(channel, "variants"), default: derivedVariants[channel.id] ?? playbackAlternatives[channel.id] ?? [channel.id])
         return group.compactMap { channelIndex[$0] }
     }
     func matchSportsGames() {
@@ -673,7 +839,8 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         matchingGames = true
         sportsMatchTask = Task { [weak self] in
             do {
-                let result = try await catalogWork { try query.guideGames(reference: index, refreshed: refreshed, at: date) }
+                let detected = self?.aiResults.detectedGames ?? [:]
+                let result = try await catalogWork { try query.guideGames(reference: index, refreshed: refreshed, at: date, detected: detected) }
                 guard !Task.isCancelled, let self, self.queryRevision == revision, self.sportsData.metadataRevision == sportsRevision else { return }
                 let links = result.links
                 self.sportsData.showGuideGames(result.index)
@@ -692,13 +859,27 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
     func feeds(for gameID: String, playableOnly: Bool = false) -> [Channel] {
         let date = clock
         if playableOnly, game(gameID)?.canWatch(at: date) != true { return [] }
-        return (gameLinks[gameID] ?? []).compactMap { link in
+        let ranked = (gameLinks[gameID] ?? []).compactMap { link -> (Channel, Int)? in
             // Before the full catalog, links come from the launch snapshot,
             // which kept only feeds that matched the audience when saved.
             guard (!playableOnly || link.isValid(at: date)), let channel = channelIndex[link.channelID], !flag(channel, "hidden"),
                   !catalogReady || audience.includes(language: language(channel), region: region(channel)) else { return nil }
-            return channel
-        }.sorted { name($0).localizedStandardCompare(name($1)) == .orderedAscending }
+            return (channel, feedScore(channel, evidence: link.evidence))
+        }
+        // Best first, so Watch plays it: favorites, guide evidence, your
+        // language, then picture quality; backups last.
+        return ranked.sorted { $0.1 != $1.1 ? $0.1 > $1.1 : name($0.0).localizedStandardCompare(name($1.0)) == .orderedAscending }.map(\.0)
+    }
+
+    private func feedScore(_ channel: Channel, evidence: String) -> Int {
+        var score = flag(channel, "favorite") ? 100 : 0
+        score += evidence == "TV guide" ? 40 : evidence == "TV network" ? 20 : 30
+        if let preferred = languages.first, language(channel) == preferred { score += 15 }
+        let text = (channel.quality + " " + channel.name).uppercased()
+        if text.contains("4K") || text.contains("UHD") { score += 12 } else if text.contains("FHD") || text.contains("1080") { score += 10 }
+        else if text.contains("HD") { score += 8 } else if text.contains("SD") { score -= 5 }
+        if text.contains("BACKUP") || text.contains("(B)") { score -= 10 }
+        return score
     }
     /// A matched game, or one restored from the launch snapshot.
     func game(_ id: String) -> SportsGame? { sportsData.index.games[id] ?? homeSports.games.first { $0.id == id } }
@@ -736,6 +917,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         } catch { inform("Variants weren’t separated", error.localizedDescription) }
     }
     private func offerAlternate() {
+        if nowPlayingVOD != nil { return }
         guard let channel = playback.channel else { return }
         let available = variants(of: channel).filter { $0.id != channel.id }
         if !available.isEmpty {
@@ -772,47 +954,11 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         }
     }
     func waitForOrganization() async { await organizationPreparation?.value }
-    var isOrganizing: Bool { organizeTask != nil }
-    /// Sorts new or changed channel groups into categories with the user's
-    /// OpenAI key, quietly, up to 400 groups per request. Only the preferred
-    /// audience is sent. Unchanged groups are never resent; results are saved
-    /// as `taxonomy.placement.*` and sync like other personal choices.
-    func organizeInBackground() {
-        guard organizeTask == nil, catalogReady, !demo, let model = openAI.groupModel(), let groups = directory?.nameGroups else { return }
-        let audience = organizationAudience
-        let pending = groups.pending(in: audience).filter { group in
-            let saved: GroupPlacement? = personal.value("taxonomy.placement.\(group.id)", default: nil)
-            return saved?.isReusable(for: group) != true
-        }
-        guard !pending.isEmpty else { return }
-        let taxonomy = personal.has("preferences.organizationPaths") ? GroupTaxonomy(paths: organizationPaths) : groups.taxonomy
-        organizeTask = Task { [weak self] in
-            defer { self?.organizeTask = nil }
-            do {
-                for start in stride(from: 0, to: pending.count, by: Decisions.maxQuestions) {
-                    let batch = Array(pending[start..<min(start + Decisions.maxQuestions, pending.count)])
-                    let result = try await GroupOrganizationPipeline.classify(batch, taxonomy: taxonomy, model: model)
-                    guard let self else { return }
-                    try Task.checkCancellation()
-                    await self.waitForCatalog()
-                    var updates: [String: Data?] = [:]
-                    for placement in result {
-                        // A changed group or a manual correction made meanwhile wins.
-                        guard let current = self.directory?.nameGroups.byID[placement.id], current.fingerprint == placement.fingerprint else { continue }
-                        let key = "taxonomy.placement.\(placement.id)"
-                        let existing: GroupPlacement? = self.personal.value(key, default: nil)
-                        if existing?.isReusable(for: current) == true { continue }
-                        updates[key] = try JSONEncoder().encode(placement)
-                    }
-                    if !updates.isEmpty { try self.personal.write(updates); self.rebuild() }
-                }
-                self?.openAI.succeeded()
-            } catch {
-                self?.openAI.report(error)
-            }
-        }
-    }
-    func waitForGroupOrganization() async { await organizeTask?.value }
+    /// Sorts, names and links the lineup with the user's OpenAI key, quietly.
+    /// Only the preferred audience is sent and unchanged groups are never
+    /// resent; placements are saved as `taxonomy.placement.*` and sync like
+    /// other personal choices. See `runAIJobs`.
+    func organizeInBackground() { runAIJobs() }
     func setGroupPath(_ group: CatalogNameGroup, path: [String]) {
         guard !path.isEmpty, path.count <= 4, path.allSatisfy(GroupNames.validLabel) else {
             inform("Check the category name", "Use up to four short category names, separated by /. Each name can contain letters, numbers, spaces, an apostrophe, an ampersand, or a hyphen."); return
@@ -827,7 +973,6 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         } catch { inform("Correction could not be saved", safeError(error)) }
     }
     func retryGroup(_ group: CatalogNameGroup) { remove("taxonomy.placement.\(group.id)") }
-    func cancelOrganization() { organizeTask?.cancel() }
     func applySuggestions(_ selected: [ChannelSuggestion], includeVariants: Bool) {
         do {
             var changes: [String: Data?] = [:]
@@ -882,7 +1027,7 @@ struct AppNotice: Identifiable { let id = UUID(); var title: String; var message
         let values = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let id = values.first { $0.name == "id" }?.value
         switch url.host {
-        case "guide": selectedTab = .guide
+        case "guide": selectedTab = .home; homeDestination = .guide
         case "search": searchRequest = values.first { $0.name == "query" }?.value ?? ""; selectedTab = .search
         case "refresh": selectedTab = .home; Task { await refreshDueSources(force: true) }
         default: break

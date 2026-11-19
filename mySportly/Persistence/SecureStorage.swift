@@ -12,9 +12,11 @@ struct SourceSecrets: Codable, Sendable {
 }
 
 enum KeychainStore {
-    static func write(_ data: Data, account: String, sync: Bool = false) throws {
+    /// `thisDeviceOnly` also keeps the item out of backups restored to another device.
+    static func write(_ data: Data, account: String, sync: Bool = false, thisDeviceOnly: Bool = false) throws {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "app.iska.mysportly", kSecAttrAccount as String: account, kSecAttrSynchronizable as String: sync]
-        let attributes: [String: Any] = [kSecValueData as String: data, kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
+        let accessible = thisDeviceOnly ? kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly : kSecAttrAccessibleAfterFirstUnlock
+        let attributes: [String: Any] = [kSecValueData as String: data, kSecAttrAccessible as String: accessible]
         let result = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if result == errSecItemNotFound {
             var new = query; attributes.forEach { new[$0.key] = $0.value }
@@ -109,6 +111,35 @@ actor CatalogCache {
     }
     func removePreparedStages() {
         try? FileManager.default.removeItem(at: directory.appending(path: "stages.sealed"))
+    }
+    /// AI answers derived from the catalog; sealed like it, never synced.
+    func saveAIResults(_ results: AIResults) throws {
+        try prepare()
+        let sealed = try AES.GCM.seal(JSONEncoder().encode(results), using: key())
+        guard let data = sealed.combined else { throw KeychainStore.SecureFailure.write }
+        try data.write(to: directory.appending(path: "ai.sealed"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+    func loadAIResults() -> AIResults? {
+        guard let data = try? Data(contentsOf: directory.appending(path: "ai.sealed")),
+              let box = try? AES.GCM.SealedBox(combined: data),
+              let key = try? key(), let plain = try? AES.GCM.open(box, using: key) else { return nil }
+        return try? JSONDecoder().decode(AIResults.self, from: plain)
+    }
+    /// A source's movies and shows; sealed like the catalog, never synced.
+    func saveVOD(_ catalog: VODCatalog) throws {
+        try prepare()
+        let sealed = try AES.GCM.seal(CatalogCodec.encode(catalog), using: key())
+        guard let data = sealed.combined else { throw KeychainStore.SecureFailure.write }
+        try data.write(to: directory.appending(path: "vod.\(catalog.sourceID.uuidString).sealed"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+    func loadVOD(_ sourceID: UUID) -> VODCatalog? {
+        guard let data = try? Data(contentsOf: directory.appending(path: "vod.\(sourceID.uuidString).sealed")),
+              let box = try? AES.GCM.SealedBox(combined: data),
+              let key = try? key(), let plain = try? AES.GCM.open(box, using: key) else { return nil }
+        return try? CatalogCodec.decode(VODCatalog.self, from: plain)
+    }
+    func removeVOD(_ sourceID: UUID) {
+        try? FileManager.default.removeItem(at: directory.appending(path: "vod.\(sourceID.uuidString).sealed"))
     }
     func savePlaylist(_ text: String, sourceID: UUID) throws {
         try prepare()

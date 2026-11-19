@@ -9,6 +9,9 @@ struct SearchScreen: View {
     @State private var limit = 50
     @State private var searchTask: Task<Void, Never>?
     @State private var destination: BrowseDestination?
+    @State private var movies: [Movie] = []
+    @State private var shows: [Series] = []
+    @State private var vodTask: Task<Void, Never>?
 
     private var text: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -35,7 +38,7 @@ struct SearchScreen: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
-            } else if groups.isEmpty && searched == text {
+            } else if groups.isEmpty && searched == text && movies.isEmpty && shows.isEmpty {
                 ContentUnavailableView.search(text: text).accessibilityIdentifier("search-empty")
             } else {
                 if !groups.teams.isEmpty {
@@ -52,10 +55,37 @@ struct SearchScreen: View {
                 }
                 if !groups.channels.isEmpty {
                     Section("Channels") {
-                        ForEach(groups.channels.prefix(limit)) { SearchResultRow(match: $0) }
+                        ForEach(store.collapseFamilies(Array(groups.channels.prefix(limit))) { $0.channel }) { entry in
+                            switch entry {
+                            case .single(let match): SearchResultRow(match: match)
+                            case .family(let name, let matches): ChannelFamilyRow(name: name, channels: matches.map(\.channel))
+                            }
+                        }
                         if groups.channels.count > limit { Button("Show More") { limit += 50 } }
                     }
                     .accessibilityIdentifier("search-channels")
+                }
+                if !movies.isEmpty {
+                    Section("Movies") {
+                        ForEach(movies) { movie in
+                            NavigationLink { MovieDetailView(movie: movie) } label: {
+                                VODResultRow(title: movie.title, detail: movie.year.map(String.init) ?? "Movie", artwork: movie.poster)
+                            }
+                            .contextMenu { MovieMenu(movie: movie) }
+                        }
+                    }
+                    .accessibilityIdentifier("search-movies")
+                }
+                if !shows.isEmpty {
+                    Section("TV Shows") {
+                        ForEach(shows) { show in
+                            NavigationLink { SeriesDetailView(show: show) } label: {
+                                VODResultRow(title: show.title, detail: show.year.map(String.init) ?? "TV Show", artwork: show.poster)
+                            }
+                            .contextMenu { Button("Play", systemImage: "play.fill") { store.playNext(of: show) } }
+                        }
+                    }
+                    .accessibilityIdentifier("search-shows")
                 }
             }
         }
@@ -68,12 +98,12 @@ struct SearchScreen: View {
         }
         .searchable(text: $query, isPresented: $searchPresented, placement: .navigationBarDrawer(displayMode: .always), prompt: "Teams, channels and shows")
         .onChange(of: query) { _, _ in search() }
-        .onSubmit(of: .search) { store.addRecentSearch(text) }
+        .onSubmit(of: .search) { store.addRecentSearch(text); search(askAI: true) }
         .onChange(of: store.queryRevision) { _, _ in if !text.isEmpty { search() } }
         .onChange(of: store.sportsLinkRevision) { _, _ in if !text.isEmpty { search() } }
         .onAppear { receiveRoute() }
         .onChange(of: store.searchRequest) { _, _ in receiveRoute() }
-        .onDisappear { searchTask?.cancel() }
+        .onDisappear { searchTask?.cancel(); vodTask?.cancel() }
     }
 
     private func receiveRoute() {
@@ -81,12 +111,14 @@ struct SearchScreen: View {
         query = request; store.searchRequest = nil
     }
 
-    /// Local matching only: as-you-type, against the prepared index or, before
-    /// it exists, the launch snapshot.
-    private func search() {
+    /// Local matching as you type, against the prepared index or, before it
+    /// exists, the launch snapshot. OpenAI is asked only on Search, never
+    /// while typing.
+    private func search(askAI: Bool = false) {
         searchTask?.cancel()
         let request = text
         limit = 50
+        searchVOD(request)
         guard !request.isEmpty else { groups = SearchGroups(); searched = ""; return }
         let ignored: Set<String> = ["find", "watch", "show", "me", "the", "a", "now", "tonight", "please", "on", "channel", "channels"]
         let keywords = request.lowercased().split(separator: " ").map(String.init).filter { !ignored.contains($0) }
@@ -109,7 +141,7 @@ struct SearchScreen: View {
                 var found = SearchGrouping.group(query: request, matches: matches, choices: choices, followedIDs: followed, at: date)
                 // Only when local matching found nothing: ask OpenAI what the
                 // words mean, then search locally with that. Same place, no button.
-                if found.isEmpty, request.split(separator: " ").count >= 2, store.openAI.configured {
+                if askAI, found.isEmpty, movies.isEmpty, shows.isEmpty, request.split(separator: " ").count >= 2, store.openAI.configured {
                     searched = ""
                     let teams = choices.filter { $0.kind == .team }.map(\.name), leagues = choices.filter { $0.kind == .league }.map(\.name)
                     if let intent = await store.openAI.interpret(request, teams: teams, leagues: leagues, languages: store.languages) {
@@ -130,6 +162,21 @@ struct SearchScreen: View {
 }
 
 extension SearchScreen {
+    /// Movies and shows by title; loads the saved catalog on the first search.
+    private func searchVOD(_ request: String) {
+        vodTask?.cancel()
+        guard request.count >= 2 else { movies = []; shows = []; return }
+        vodTask = Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            await store.loadVOD()
+            let allMovies = store.vod.movies, allShows = store.vod.series
+            let found = await Task.detached { (VODShelf.search(request, in: allMovies, limit: 20), VODShelf.search(request, in: allShows, limit: 20)) }.value
+            guard !Task.isCancelled else { return }
+            (movies, shows) = found
+        }
+    }
+
     static func window(_ time: String, now: Date) -> (start: Date, end: Date) {
         let calendar = Calendar.current
         switch time {
@@ -149,6 +196,7 @@ extension SearchScreen {
 }
 
 private struct SearchResultRow: View {
+    @Environment(AppStore.self) private var store
     let match: CatalogMatch
     var body: some View {
         if let program = match.program {
@@ -158,8 +206,28 @@ private struct SearchResultRow: View {
                     Text(match.name).font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .contextMenu {
+                Button("Watch Channel", systemImage: "play.fill") { store.play(match.channel) }
+                let favorite = store.flag(match.channel, "favorite")
+                Button(favorite ? "Remove Favorite" : "Favorite Channel", systemImage: favorite ? "heart.slash" : "heart") { store.toggle(match.channel, "favorite") }
+            }
         } else {
             PlayableChannelRow(channel: match.channel)
+        }
+    }
+}
+
+private struct VODResultRow: View {
+    let title: String
+    let detail: String
+    let artwork: URL?
+    var body: some View {
+        HStack(spacing: 12) {
+            Poster(url: artwork, title: "").frame(width: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline).lineLimit(1)
+                Text(detail).font(.subheadline).foregroundStyle(.secondary)
+            }
         }
     }
 }

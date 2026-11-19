@@ -7,17 +7,35 @@ public struct GuideGameParser: Sendable {
     private let rules: [TeamRule]
     private let tokens: [String: Set<Int>]
     private let leagueNames: [String: String]
+    private let leagueTerms: [(id: String, terms: [String])]
+    private let teamsByLeague: [String: [Int]]
     public init(reference: SportsDataIndex) {
         var rules: [TeamRule] = [], tokens: [String: Set<Int>] = [:]
         for team in reference.catalog.teams {
             let position = rules.count
-            rules.append(TeamRule(team: team, matcher: SportsFollowMatcher([team.name])))
-            let names = [team.name] + (SportsFollowCatalog.choice(named: team.name)?.aliases ?? [])
+            rules.append(TeamRule(team: team, matcher: SportsFollowMatcher([team.name] + (team.aliases ?? []))))
+            let names = [team.name] + (team.aliases ?? []) + (SportsFollowCatalog.choice(named: team.name)?.aliases ?? [])
             for word in names.flatMap({ SportsFollowMatcher.normalize($0).split(separator: " ").map(String.init) }) where word.count > 2 {
                 tokens[word, default: []].insert(position)
             }
         }
         self.rules = rules; self.tokens = tokens; leagueNames = reference.leagues.mapValues(\.name)
+        teamsByLeague = Dictionary(grouping: rules.indices) { rules[$0].team.leagueID }
+        leagueTerms = reference.leagues.values.sorted { $0.id < $1.id }.map { league in
+            (league.id, ([league.name] + (SportsFollowCatalog.choice(named: league.name)?.aliases ?? [])).map(SportsFollowMatcher.normalize))
+        }
+    }
+    /// Teams a matchup-looking listing might be about, for a model to choose
+    /// from: name-word hits plus every team of a league the listing names.
+    public func candidates(title: String, context: String) -> [SportsTeam] {
+        guard !SportsGameMatcher.isReplayOrStudio(title) else { return [] }
+        let normalized = SportsFollowMatcher.normalize(title.replacingOccurrences(of: "@", with: " at "))
+        guard [" vs ", " versus ", " v ", " at "].contains(where: normalized.contains) else { return [] }
+        var positions = Set(normalized.split(separator: " ").flatMap { tokens[String($0)] ?? [] })
+        let evidence = SportsFollowMatcher.normalize(title + " " + context)
+        for league in leagueTerms where league.terms.contains(where: evidence.contains) { positions.formUnion(teamsByLeague[league.id] ?? []) }
+        let teams = positions.map { rules[$0].team }.sorted { $0.id < $1.id }
+        return teams.count >= 2 ? Array(teams.prefix(Decisions.maxChoices - 1)) : []
     }
     public func opponents(title: String, context: String) -> [SportsTeam]? {
         guard !SportsGameMatcher.isReplayOrStudio(title) else { return nil }

@@ -9,10 +9,17 @@ struct CompactPlayer: View {
             HStack(spacing: 12) {
                 Button { store.playerSourceID = nil; store.showPlayer = true } label: {
                     HStack(spacing: 10) {
-                        ChannelLogo(url: channel.logo).frame(width: 34, height: 34)
+                        ZStack {
+                            ChannelLogo(url: channel.logo).frame(width: 34, height: 34)
+                            if store.playback.hasVideoFrame {
+                                VideoLayerView(player: store.playback.player).background(.black)
+                            }
+                        }
+                        .frame(width: 60, height: 34)
+                        .clipShape(.rect(cornerRadius: 6))
                         VStack(alignment: .leading, spacing: 1) {
                             Text(store.playerTitle).font(.subheadline.weight(.semibold)).lineLimit(1)
-                            Text(store.playback.isLoading ? "Connecting…" : store.name(channel)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            Text(store.playback.isLoading ? "Connecting…" : store.watchingTwo ? "\(store.name(channel)) + \(store.secondTitle)" : store.name(channel)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -23,7 +30,7 @@ struct CompactPlayer: View {
                 .accessibilityLabel("Open player for \(store.name(channel))")
                 Button(store.playback.isPlaying ? "Pause" : "Play", systemImage: store.playback.isPlaying ? "pause.fill" : "play.fill") { store.playback.toggle() }
                     .labelStyle(.iconOnly)
-                Button("Stop", systemImage: "xmark") { store.playback.stop() }
+                Button("Stop", systemImage: "xmark") { store.stopPlayback() }
                     .labelStyle(.iconOnly).buttonStyle(.plain).foregroundStyle(.primary)
             }
             .padding(.horizontal)
@@ -35,37 +42,140 @@ struct CompactPlayer: View {
 
 /// Full-screen player: the system video player (its own transport controls,
 /// per the HIG) with the title and live progress below. Swipe down to
-/// minimize; landscape on iPhone shows only the video.
+/// minimize; landscape on iPhone shows only the video. A second stream can
+/// play under the first (side by side in landscape), one sound at a time.
 struct PlayerScreen: View {
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var choosingSecond = false
+    @State private var streamsReveal = OverlayReveal()
 
     var body: some View {
-        let video = NativePlayerView(player: store.playback.player, onDisplayChange: store.playback.videoDisplayChanged)
+        let reveal = streamsReveal
+        let video = NativePlayerView(player: store.playback.player, onDisplayChange: store.playback.videoDisplayChanged,
+                                     onPictureInPicture: { store.playback.inPictureInPicture = $0 },
+                                     onTap: { reveal.reveal() },
+                                     fullScreenAccessory: AnyView(RevealedStreams(reveal: reveal).environment(store)))
             .accessibilityLabel("Native video player")
             .accessibilityIdentifier("stream-preview")
             .accessibilityValue(store.playback.hasVideoFrame ? "Video ready" : "Waiting for video")
-        if verticalSizeClass == .compact {
-            video.ignoresSafeArea().background(.black)
-        } else {
-            VStack(spacing: 0) {
-                HStack {
-                    Button("Minimize", systemImage: "chevron.down") { dismiss() }
-                        .labelStyle(.iconOnly).font(.title3.weight(.semibold))
-                        .buttonStyle(.glass)
-                        .accessibilityIdentifier("close-player")
-                    Spacer()
+        Group {
+            if verticalSizeClass == .compact {
+                if store.watchingTwo {
+                    HStack(spacing: 2) {
+                        video.aspectRatio(16 / 9, contentMode: .fit)
+                        SecondTile().aspectRatio(16 / 9, contentMode: .fit)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea().background(.black)
+                } else {
+                    video.ignoresSafeArea().background(.black)
+                        // The native controls can't hold our menu on iPhone, so a
+                        // Streams button shows on tap and fades with them.
+                        .overlay(alignment: .top) { RevealedStreams(reveal: reveal).padding(.top, 8) }
+                        .onAppear { reveal.reveal() }
                 }
-                .padding(.horizontal).padding(.bottom, 10)
-                video
-                    .aspectRatio(16 / 9, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .background(.black)
-                PlayerDetails().padding(.horizontal, 20).padding(.top, 22)
-                Spacer(minLength: 0)
+            } else {
+                VStack(spacing: 0) {
+                    HStack {
+                        Button("Minimize", systemImage: "chevron.down") { dismiss() }
+                            .labelStyle(.iconOnly).font(.title3.weight(.semibold))
+                            .buttonStyle(.glass)
+                            .accessibilityIdentifier("close-player")
+                        Spacer()
+                        if store.nowPlayingVOD == nil {
+                            Button(store.watchingTwo ? "Change Second" : "Watch Two", systemImage: "rectangle.split.1x2") { choosingSecond = true }
+                                .font(.subheadline.weight(.semibold))
+                                .buttonStyle(.glass)
+                                .accessibilityIdentifier("add-second-stream")
+                        }
+                    }
+                    .padding(.horizontal).padding(.bottom, 10)
+                    video
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .background(.black)
+                    if store.watchingTwo {
+                        TileCaption(title: store.playerTitle, subtitle: store.playerSubtitle, hasSound: !store.soundOnSecond) { store.focusSound(onSecond: false) }
+                            .padding(.horizontal, 20).padding(.vertical, 10)
+                        SecondTile()
+                            .aspectRatio(16 / 9, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                        TileCaption(title: store.secondTitle, subtitle: store.secondSubtitle, hasSound: store.soundOnSecond, onClose: store.stopSecond) { store.focusSound(onSecond: true) }
+                            .padding(.horizontal, 20).padding(.vertical, 10)
+                    } else {
+                        PlayerDetails().padding(.horizontal, 20).padding(.top, 22)
+                    }
+                    Spacer(minLength: 0)
+                }
             }
         }
+        .sheet(isPresented: $choosingSecond) { SecondStreamPicker() }
+    }
+}
+
+/// The second stream: video only, with its state over it.
+private struct SecondTile: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        let second = store.secondPlayback
+        NativePlayerView(player: second.player, controls: false, pictureInPicture: false, onDisplayChange: second.videoDisplayChanged)
+            .background(.black)
+            .overlay {
+                if let error = second.errorMessage {
+                    VStack(spacing: 8) {
+                        Text(error).font(.footnote).multilineTextAlignment(.center)
+                        Button("Try Again") { second.retry() }.buttonStyle(.glass)
+                    }
+                    .foregroundStyle(.white).padding()
+                } else if second.isLoading {
+                    ProgressView().tint(.white)
+                }
+            }
+            .overlay(alignment: .topLeading) {
+                Button(store.soundOnSecond ? "Sound On" : "Sound Off", systemImage: store.soundOnSecond ? "speaker.wave.2.fill" : "speaker.slash.fill") {
+                    store.focusSound(onSecond: !store.soundOnSecond)
+                }
+                .labelStyle(.iconOnly).font(.footnote.weight(.semibold))
+                .buttonStyle(.glass).padding(8)
+                .accessibilityIdentifier("second-sound")
+            }
+            .contentShape(.rect)
+            .onTapGesture { store.focusSound(onSecond: true) }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Second video")
+            .accessibilityIdentifier("second-stream")
+            .accessibilityValue(second.hasVideoFrame ? "Video ready" : "Waiting for video")
+    }
+}
+
+/// Title row under each video in two-up viewing. Tap the speaker to hear that one.
+private struct TileCaption: View {
+    let title: String
+    let subtitle: String
+    let hasSound: Bool
+    var onClose: (() -> Void)?
+    let selectSound: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                if !subtitle.isEmpty { Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+            }
+            Spacer(minLength: 0)
+            Button(hasSound ? "Playing Sound" : "Play Sound", systemImage: hasSound ? "speaker.wave.2.fill" : "speaker.slash") { selectSound() }
+                .labelStyle(.iconOnly).font(.body).tint(hasSound ? .accentColor : .secondary)
+                .accessibilityValue(hasSound ? "On" : "Off")
+            if let onClose {
+                Button("Close Second", systemImage: "xmark.circle.fill") { onClose() }
+                    .labelStyle(.iconOnly).font(.title3).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("close-second-stream")
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -80,21 +190,35 @@ private struct PlayerDetails: View {
                     Text(store.playerTitle).font(.headline).lineLimit(2)
                         .accessibilityIdentifier("player-title")
                         .accessibilityValue(Text(verbatim: playback.channel?.id ?? ""))
-                    if !store.playerSubtitle.isEmpty { Text(store.playerSubtitle).font(.subheadline).foregroundStyle(.secondary) }
                 }
                 Spacer()
-                if let channel = playback.channel {
+                if let channel = playback.channel, store.nowPlayingVOD == nil {
                     let favorite = store.flag(channel, "favorite")
                     Button(favorite ? "Remove Favorite" : "Favorite", systemImage: favorite ? "heart.fill" : "heart") { store.toggle(channel, "favorite") }
                         .labelStyle(.iconOnly).font(.title3).tint(favorite ? .pink : .secondary)
                         .accessibilityIdentifier("player-favorite")
                 }
             }
+            // What's playing, with the other streams one tap away.
+            HStack(spacing: 10) {
+                Text(store.playerSubtitle).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 0)
+                StreamsMenu()
+            }
+            if let next = store.vodUpNext {
+                let button = Button { store.playUpNext() } label: {
+                    Label("Next: \(next.episode.code) · \(next.episode.title)", systemImage: "forward.end.fill").lineLimit(1)
+                }
+                .accessibilityIdentifier("player-next-episode")
+                // Stands out once the episode ends.
+                if playback.reachedEnd { button.buttonStyle(.glassProminent) } else { button.buttonStyle(.glass) }
+            }
             if let error = playback.errorMessage {
                 HStack {
                     Text(error).font(.subheadline).foregroundStyle(.secondary)
                     Button("Try Again") { playback.retry() }
                 }
+                if let item = store.nowPlayingVOD, !VODFormat.isNative(item.container) { OpenElsewhere(item: item) }
             } else if playback.isLoading {
                 Text(playback.hasVideoFrame ? "Buffering…" : "Connecting…").font(.subheadline).foregroundStyle(.secondary)
             } else if let notice = playback.playbackNotice {
@@ -112,6 +236,70 @@ private struct PlayerDetails: View {
                 }
                 .accessibilityElement(children: .combine)
             }
+        }
+    }
+}
+
+/// "Streams": the feeds for what's playing, current one checked. Hidden when
+/// there's only one.
+struct StreamsMenu: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        let feeds = store.playerFeeds
+        if feeds.count > 1, let current = store.playback.channel {
+            Menu {
+                Picker("Streams", selection: Binding(get: { current.id }, set: { store.selectPlayerFeed($0) })) {
+                    ForEach(feeds) { feed in Text(feedLabel(feed, in: feeds)).tag(feed.id) }
+                }
+            } label: {
+                Label("Streams", systemImage: "antenna.radiowaves.left.and.right")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.glass)
+            .accessibilityValue(feedLabel(current, in: feeds))
+            .accessibilityIdentifier("player-stream-picker")
+        }
+    }
+
+    /// Merged feeds share a display name, so tell them apart by quality,
+    /// provider, then position.
+    private func feedLabel(_ feed: Channel, in feeds: [Channel]) -> String {
+        let multipleSources = Set(feeds.map(\.sourceID)).count > 1
+        func base(_ channel: Channel) -> String {
+            let quality = channel.quality.isEmpty || channel.quality == "Auto" ? nil : channel.quality
+            let source = multipleSources ? store.sources.first { $0.id == channel.sourceID }?.name : nil
+            return [store.name(channel), quality, source].compactMap { $0 }.joined(separator: " · ")
+        }
+        let label = base(feed)
+        let twins = feeds.filter { base($0) == label }
+        guard twins.count > 1, let position = twins.firstIndex(where: { $0.id == feed.id }) else { return label }
+        return "\(label) · Feed \(position + 1)"
+    }
+}
+
+/// Shows the Streams button for a few seconds after each tap on the video.
+@MainActor @Observable final class OverlayReveal {
+    private(set) var visible = false
+    @ObservationIgnored private var hide: Task<Void, Never>?
+    func reveal() {
+        withAnimation(.easeOut(duration: 0.2)) { visible = true }
+        hide?.cancel()
+        hide = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.3)) { self?.visible = false }
+        }
+    }
+    /// Keeps it up while its menu is open, until the next tap on the video.
+    func hold() { hide?.cancel() }
+}
+
+private struct RevealedStreams: View {
+    let reveal: OverlayReveal
+    var body: some View {
+        if reveal.visible {
+            StreamsMenu().simultaneousGesture(TapGesture().onEnded { reveal.hold() }).transition(.opacity)
         }
     }
 }

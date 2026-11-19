@@ -1,11 +1,25 @@
 import SwiftUI
 
+extension EnvironmentValues {
+    /// Space the hero's art runs under at the top (status and navigation bars).
+    @Entry var heroTopInset: CGFloat = 0
+}
+
+/// Edge to edge, as in the TV app: each page's colors run up under the bars
+/// and fade into the page below.
 struct HomeHeroPager: View {
     let items: [HomeHero]
+    /// The most recent unfinished movie or episode, as the first page.
+    var continuing: WatchProgress?
+    var topInset: CGFloat = 0
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
+        let pages = items.count + (continuing == nil ? 0 : 1)
         TabView {
+            if let continuing {
+                HeroContinuePage(item: continuing).playerSource("hero.continue")
+            }
             ForEach(items) { item in
                 Group {
                     switch item {
@@ -14,12 +28,11 @@ struct HomeHeroPager: View {
                     }
                 }
                 .playerSource("hero.\(item.id)")
-                .padding(.horizontal)
-                .padding(.bottom, items.count > 1 ? 36 : 0)
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .always : .never))
-        .frame(height: (sizeClass == .regular ? 400 : 300) + (items.count > 1 ? 36 : 0))
+        .tabViewStyle(.page(indexDisplayMode: pages > 1 ? .always : .never))
+        .environment(\.heroTopInset, topInset)
+        .frame(height: (sizeClass == .regular ? 460 : 380) + topInset)
     }
 }
 
@@ -27,6 +40,7 @@ struct HomeHeroPager: View {
 struct HeroGameArt: View {
     let away: SportsTeam?
     let home: SportsTeam?
+    @Environment(\.heroTopInset) private var topInset
     @State private var awayColor: Color?
     @State private var homeColor: Color?
 
@@ -40,7 +54,7 @@ struct HeroGameArt: View {
                 }
                 .padding(.horizontal, 22).padding(.vertical, 12)
                 .glassEffect(in: .rect(cornerRadius: 24))
-                .padding(.top, 18)
+                .padding(.top, 18 + topInset)
             }
             .task(id: away?.logo) { awayColor = await color(away?.logo) }
             .task(id: home?.logo) { homeColor = await color(home?.logo) }
@@ -92,6 +106,7 @@ struct HeroGamePage: View {
 
 struct HeroChannelPage: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.heroTopInset) private var topInset
     let item: HomeChannel
 
     var body: some View {
@@ -101,7 +116,7 @@ struct HeroChannelPage: View {
                 LinearGradient(colors: [Color.accentColor.opacity(0.55), Color.secondary.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)
                     .overlay(alignment: .top) {
                         ChannelLogo(url: channel.logo).frame(width: 130, height: 76)
-                            .glassEffect(in: .rect(cornerRadius: 22)).padding(.top, 18)
+                            .glassEffect(in: .rect(cornerRadius: 22)).padding(.top, 18 + topInset)
                     }
             } details: {
                 Text(store.name(channel)).font(.subheadline).opacity(0.85)
@@ -112,22 +127,37 @@ struct HeroChannelPage: View {
                     .accessibilityIdentifier("home-hero-watch")
                 Button(favorite ? "Favorited" : "Favorite", systemImage: favorite ? "heart.fill" : "heart") { store.toggle(channel, "favorite") }
                     .buttonStyle(.glass)
+                Menu {
+                    if let program = item.program { Button("Program Details", systemImage: "info.circle") { store.homeDestination = .program(program, channel) } }
+                    Button("Hide Channel", systemImage: "eye.slash") { store.toggle(channel, "hidden") }
+                } label: { Label("More", systemImage: "ellipsis") }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
             }
         }
     }
 }
 
-/// Artwork with a legible title area and actions along the bottom.
+/// Full-bleed artwork with the title and actions over it. The art darkens
+/// behind the text, then fades out into the page so the colors run on down.
 struct HeroCard<Art: View, Details: View, Actions: View>: View {
     @ViewBuilder let art: Art
     @ViewBuilder let details: Details
     @ViewBuilder let actions: Actions
+    static var fade: CGFloat { 72 }
 
     var body: some View {
         art
-            .overlay(alignment: .bottom) {
-                LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
+            .overlay {
+                LinearGradient(stops: [.init(color: .clear, location: 0.3), .init(color: .black.opacity(0.55), location: 0.85)],
+                               startPoint: .top, endPoint: .bottom)
                     .allowsHitTesting(false)
+            }
+            .mask {
+                VStack(spacing: 0) {
+                    Rectangle()
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: Self.fade)
+                }
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -135,9 +165,69 @@ struct HeroCard<Art: View, Details: View, Actions: View>: View {
                     HStack(spacing: 10) { actions }.padding(.top, 4)
                 }
                 .foregroundStyle(.white)
-                .padding(18)
+                .padding(.horizontal, 20)
+                .padding(.bottom, Self.fade - 8)
             }
-            .clipShape(.rect(cornerRadius: 26))
             .accessibilityElement(children: .contain)
+    }
+}
+
+/// A movie or episode in progress: its artwork across the page, and Resume.
+/// With TMDB, its best backdrop and title logo, held still.
+struct HeroContinuePage: View {
+    @Environment(AppStore.self) private var store
+    let item: WatchProgress
+    /// TMDB's details, for the item they were found for.
+    @State private var art: (itemID: String, title: TMDBTitle?)?
+
+    private struct ArtKey: Hashable { let itemID: String; let library: Int; let enabled: Bool }
+
+    var body: some View {
+        let tmdb = art?.itemID == item.itemID ? art?.title : nil
+        HeroCard {
+            // The artwork itself fills the page, up under the bars.
+            Color.clear
+                .overlay(alignment: .top) {
+                    AsyncImage(url: item.artwork) { phase in
+                        if let image = phase.image { image.resizable().scaledToFill() }
+                        else { LinearGradient(colors: [.indigo.opacity(0.6), .secondary.opacity(0.25)], startPoint: .topLeading, endPoint: .bottomTrailing) }
+                    }
+                }
+                .overlay(alignment: .top) {
+                    if let backdrop = tmdb?.backdropURLs.first {
+                        AsyncImage(url: backdrop, transaction: Transaction(animation: .easeOut(duration: 0.4))) { phase in
+                            if let image = phase.image { image.resizable().scaledToFill().transition(.opacity) }
+                        }
+                    }
+                }
+                .clipped()
+        } details: {
+            Label("Continue Watching", systemImage: "play.circle.fill").font(.caption.weight(.semibold)).opacity(0.9)
+            TitleLogo(url: tmdb?.logoURL, title: item.title, maxWidth: 220, maxHeight: 64) {
+                Text(item.title).font(.title3.bold()).lineLimit(2)
+            }
+            if !item.subtitle.isEmpty { Text(item.subtitle).font(.subheadline).opacity(0.85).lineLimit(1) }
+            HStack(spacing: 8) {
+                ProgressView(value: item.fraction).tint(.white).frame(maxWidth: 140)
+                Text("\(item.remaining.watchDuration) left").font(.caption).opacity(0.85)
+            }
+        } actions: {
+            Button("Resume", systemImage: "play.fill") { store.resume(item) }
+                .buttonStyle(.glassProminent)
+                .accessibilityIdentifier("home-resume")
+            Menu {
+                Button("Mark as Watched", systemImage: "checkmark.circle") { store.setWatched(item, true) }
+                Button("Remove from Continue Watching", systemImage: "minus.circle", role: .destructive) { store.clearProgress(item) }
+            } label: { Label("More", systemImage: "ellipsis") }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.glass)
+        }
+        .accessibilityIdentifier("home-continue")
+        // Again once the library loads, which can match a title never opened with TMDB on.
+        .task(id: ArtKey(itemID: item.itemID, library: store.vod.revision, enabled: store.tmdbEnabled)) {
+            let found = await store.tmdbTitle(continuing: item)
+            guard !Task.isCancelled else { return }
+            art = (item.itemID, found)
+        }
     }
 }

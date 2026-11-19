@@ -1,0 +1,176 @@
+import Foundation
+
+/// What the app tells TMDB about a library title: a title, a year and ids.
+public struct TMDBLookup: Hashable, Sendable {
+    /// The movie's or show's item ID; its match is saved under it.
+    public var key: String
+    public var kind: TMDBKind
+    public var title: String
+    public var year: Int?
+    /// The provider's, when it sent them.
+    public var tmdbID: Int?
+    public var imdbID: String?
+
+    public init(key: String, kind: TMDBKind, title: String, year: Int? = nil, tmdbID: Int? = nil, imdbID: String? = nil) {
+        self.key = key; self.kind = kind; self.title = title; self.year = year; self.tmdbID = tmdbID; self.imdbID = imdbID
+    }
+
+    /// The shown title: `VODTitle.clean`'s, or the AI's tidier one.
+    public static func movie(_ movie: Movie, detail: MovieDetail?) -> TMDBLookup {
+        TMDBLookup(key: movie.id, kind: .movie, title: movie.title, year: movie.year ?? detail?.year,
+                   tmdbID: detail?.tmdbID ?? movie.tmdbID, imdbID: detail?.imdbID)
+    }
+
+    public static func show(_ show: Series, detail: SeriesDetail?) -> TMDBLookup {
+        TMDBLookup(key: show.id, kind: .tv, title: show.title, year: show.year, tmdbID: detail?.tmdbID ?? show.tmdbID, imdbID: detail?.imdbID)
+    }
+
+    /// How much there is to match on: 3 the provider's TMDB id, 2 its IMDb
+    /// id, 1 a year, 0 the title alone.
+    public var evidence: Int { tmdbID != nil ? 3 : imdbID != nil ? 2 : year != nil ? 1 : 0 }
+}
+
+public enum TMDBMatch {
+    /// For comparing titles: lowercase, without accents, apostrophes,
+    /// punctuation or a leading article, with "&" read as "and".
+    public static func normalized(_ title: String) -> String {
+        // Folding only changes non-ASCII text, and is the slow part on a large library.
+        let folded = (title.utf8.allSatisfy { $0 < 128 } ? title.lowercased()
+                      : title.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX")))
+            .replacingOccurrences(of: "&", with: " and ")
+            .replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "’", with: "")
+        var words = folded.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        if words.count > 1, ["the", "a", "an"].contains(words[0]) { words.removeFirst() }
+        return words.joined(separator: " ")
+    }
+
+    /// A year apart still agrees (a festival premiere, then the release); an
+    /// unknown year agrees with any.
+    public static func yearsAgree(_ a: Int?, _ b: Int?) -> Bool {
+        guard let a, let b else { return true }
+        return abs(a - b) <= 1
+    }
+
+    /// The search result that is this title: the same name (or original name)
+    /// from within a year, the exact year first, otherwise in TMDB's order.
+    /// Without a year only the same name counts; with one, a name that
+    /// contains the other as whole words does too, and so does TMDB's top
+    /// result from that exact year (a translated title, such as "Der Pate").
+    public static func best(_ results: [TMDBReference], title: String, year: Int?) -> TMDBReference? {
+        let wanted = normalized(title)
+        guard !wanted.isEmpty else { return nil }
+        var best: (score: (Int, Int, Int), result: TMDBReference)?
+        for (index, result) in results.enumerated() {
+            let names = [result.title, result.originalTitle].map(normalized).filter { !$0.isEmpty }
+            let exact = names.contains(wanted)
+            guard exact || (year != nil && names.contains { contains($0, wanted) || contains(wanted, $0) }) else { continue }
+            var distance = 0
+            if let year {
+                guard let found = result.year, abs(found - year) <= 1 else { continue }
+                distance = abs(found - year)
+            }
+            let score = (exact ? 0 : 1, distance, index)
+            if best.map({ score < $0.score }) ?? true { best = (score, result) }
+        }
+        if let best { return best.result }
+        // TMDB searches translated and alternative titles too, which it doesn't return.
+        guard let year, let top = results.first, top.year == year else { return nil }
+        return top
+    }
+
+    /// `part` (four letters or more) as whole words inside a longer `whole`.
+    private static func contains(_ whole: String, _ part: String) -> Bool {
+        part.count >= 4 && whole.count > part.count && " \(whole) ".contains(" \(part) ")
+    }
+}
+
+/// How long TMDB answers are kept on the device.
+public enum TMDBCachePolicy {
+    /// Details are refetched after a week, a match after a month and a miss
+    /// after three days, when a page or the hero next needs them.
+    public static let details: TimeInterval = 7 * 86_400
+    public static let match: TimeInterval = 30 * 86_400
+    public static let miss: TimeInterval = 3 * 86_400
+    /// Nothing is kept longer: well inside TMDB's six-month limit, with stale
+    /// copies standing in while offline.
+    public static let retention: TimeInterval = 60 * 86_400
+
+    /// A date in the future (the clock moved) counts as stale.
+    public static func isFresh(_ saved: Date, maxAge: TimeInterval, at date: Date) -> Bool {
+        let age = date.timeIntervalSince(saved)
+        return age >= 0 && age < maxAge
+    }
+}
+
+/// A library title's TMDB id, or that nothing matched: when, and from how much.
+public struct TMDBMatchRecord: Codable, Hashable, Sendable {
+    public var tmdbID: Int?
+    public var saved: Date
+    /// The lookup's `evidence` when it was made.
+    public var evidence: Int
+    public init(tmdbID: Int?, saved: Date, evidence: Int = 0) { self.tmdbID = tmdbID; self.saved = saved; self.evidence = evidence }
+    public func isFresh(at date: Date) -> Bool {
+        TMDBCachePolicy.isFresh(saved, maxAge: tmdbID == nil ? TMDBCachePolicy.miss : TMDBCachePolicy.match, at: date)
+    }
+    /// Fresh, and made from at least what `lookup` knows. A lookup that knows
+    /// more (the page's year or IMDb id, after Home's title-only one) matches again.
+    public func answers(_ lookup: TMDBLookup, at date: Date) -> Bool { isFresh(at: date) && evidence >= lookup.evidence }
+}
+
+extension TMDBTitle {
+    public func isFresh(at date: Date) -> Bool { TMDBCachePolicy.isFresh(fetched, maxAge: TMDBCachePolicy.details, at: date) }
+}
+
+extension TMDBCollection {
+    public func isFresh(at date: Date) -> Bool { TMDBCachePolicy.isFresh(fetched, maxAge: TMDBCachePolicy.details, at: date) }
+}
+
+/// The library by TMDB id and by title, to show TMDB's recommendations and a
+/// collection's parts that are actually in it. Holds positions in `items`
+/// (which shares the library's storage), not copies.
+public struct TMDBLibraryIndex<Item: VODItem>: Sendable {
+    private let items: [Item]
+    private var byTMDB: [Int: Int] = [:]
+    private var byTitle: [String: [Int]] = [:]
+    private var byID: [String: Int] = [:]
+
+    public init(_ items: [Item]) {
+        self.items = items
+        for (position, item) in items.enumerated() {
+            if byID[item.id] == nil { byID[item.id] = position }
+            if let id = item.tmdbID, byTMDB[id] == nil { byTMDB[id] = position }
+            let name = TMDBMatch.normalized(item.title)
+            if !name.isEmpty { byTitle[name, default: []].append(position) }
+        }
+    }
+
+    /// The library's copy of each reference, in TMDB's order and once each:
+    /// by TMDB id (the provider's, or `known`: ids matched before, by item
+    /// ID), else by title within a year. Titles known to be something else
+    /// aren't matched by name.
+    public func matches(_ references: [TMDBReference], known: [String: Int] = [:], excluding: Set<String> = []) -> [Item] {
+        var knownPositions: [Int: Int] = [:]
+        for (itemID, tmdbID) in known.sorted(by: { $0.key < $1.key }) where knownPositions[tmdbID] == nil {
+            if let position = byID[itemID] { knownPositions[tmdbID] = position }
+        }
+        var seen = excluding, found: [Item] = []
+        for reference in references {
+            guard let position = byTMDB[reference.id] ?? knownPositions[reference.id] ?? named(reference, known: known),
+                  seen.insert(items[position].id).inserted else { continue }
+            found.append(items[position])
+        }
+        return found
+    }
+
+    private func named(_ reference: TMDBReference, known: [String: Int]) -> Int? {
+        var tried = Set<String>()
+        for name in [reference.title, reference.originalTitle].map(TMDBMatch.normalized) where !name.isEmpty && tried.insert(name).inserted {
+            let match = byTitle[name]?.first { position in
+                let item = items[position]
+                return (item.tmdbID ?? known[item.id]) == nil && TMDBMatch.yearsAgree(item.year, reference.year)
+            }
+            if let match { return match }
+        }
+        return nil
+    }
+}

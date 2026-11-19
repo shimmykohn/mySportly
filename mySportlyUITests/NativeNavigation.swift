@@ -36,6 +36,14 @@ extension XCUIApplication {
         cell.tap()
     }
 
+    /// The Guide is pushed from Home's toolbar.
+    @MainActor func openGuide(file: StaticString = #filePath, line: UInt = #line) {
+        selectMainTab("Home", file: file, line: line)
+        let guide = buttons["home-guide"].firstMatch
+        XCTAssertTrue(guide.waitForExistence(timeout: 10), "Missing Guide button on Home", file: file, line: line)
+        guide.tap()
+    }
+
     /// Swipes a row until its trailing action shows, then taps it. A swipe that
     /// lands while the list is still settling sometimes doesn't open the row.
     @MainActor func revealSwipeAction(_ title: String, on row: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {

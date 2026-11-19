@@ -17,6 +17,14 @@ struct HomeGameCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("home-game-\(game.id)")
+        .contextMenu {
+            if game.state == .live { Button("Watch", systemImage: "play") { store.watchGame(game.game) } }
+            Button("Game Details", systemImage: "info.circle") { store.homeDestination = .game(game.id) }
+            ForEach([away, home].compactMap { $0 }) { team in
+                let following = store.isFollowing(team)
+                Button("\(following ? "Unfollow" : "Follow") \(team.libraryItem.name)", systemImage: following ? "minus.circle" : "plus.circle") { store.toggleFollow(team) }
+            }
+        }
     }
 
     private func card(away: SportsTeam?, home: SportsTeam?) -> some View {
@@ -37,7 +45,7 @@ struct HomeGameCard: View {
         .padding(14)
         .frame(width: 230, alignment: .leading)
         .background(.fill.tertiary, in: .rect(cornerRadius: 18))
-        .contentShape(.rect(cornerRadius: 18))
+        .contentShape([.interaction, .contextMenuPreview], .rect(cornerRadius: 18))
         .accessibilityElement(children: .combine)
     }
 }
@@ -78,8 +86,8 @@ struct HomeChannelCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("home-channel-\(channel.id)")
         .contextMenu {
-            Button("Remove Favorite", systemImage: "heart.slash") { store.toggle(channel, "favorite") }
-            Button("Hide Channel", systemImage: "eye.slash") { store.toggle(channel, "hidden") }
+            ChannelActions(channel: channel)
+            if let program { Button("Program Details", systemImage: "info.circle") { store.homeDestination = .program(program, channel) } }
         }
     }
 }

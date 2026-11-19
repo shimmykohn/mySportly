@@ -7,6 +7,8 @@ struct SettingsView: View {
             Section {
                 NavigationLink { SourcesView() } label: { Label("Sources", systemImage: "antenna.radiowaves.left.and.right") }
                 NavigationLink { LocaleSettingsView() } label: { Label("Region and Language", systemImage: "globe") }
+                NavigationLink { DownloadsSettingsView() } label: { Label("Downloads", systemImage: "arrow.down.circle") }
+                    .accessibilityIdentifier("downloads-settings")
                 Picker("Appearance", selection: preference("preferences.appearance", fallback: "System")) { ForEach(["System", "Light", "Dark"], id: \.self) { Text($0) } }
             }
             Section("iCloud") {
@@ -14,7 +16,11 @@ struct SettingsView: View {
                 if store.personal.syncChangeNeedsRelaunch { Label("Takes effect the next time you open the app.", systemImage: "info.circle").font(.footnote) }
                 Text(store.personal.cloudStatus).foregroundStyle(.secondary)
             }
-            Section { NavigationLink { OpenAIKeyView() } label: { Label("OpenAI", systemImage: "sparkles") }.accessibilityIdentifier("openai-settings") }
+            Section {
+                NavigationLink { OpenAIKeyView() } label: { Label("OpenAI", systemImage: "sparkles") }.accessibilityIdentifier("openai-settings")
+                NavigationLink { TMDBKeyView() } label: { Label("TMDB", systemImage: "film") }.accessibilityIdentifier("tmdb-settings")
+            }
+            Section { NavigationLink { AcknowledgementsView() } label: { Label("Acknowledgements", systemImage: "doc.text") } }
         }
         .navigationTitle("Settings")
     }

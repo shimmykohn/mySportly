@@ -242,6 +242,42 @@ actor ProviderClient {
         return try XMLTVParser.document(fileAt: file, sourceID: sourceID)
     }
 
+    // MARK: Movies and shows
+
+    /// Both catalogs at once. A panel without VOD returns empty lists, not an error.
+    func vodCatalog(_ source: TVSource, secrets: SourceSecrets) async throws -> VODCatalog {
+        func fetch(_ action: String) async throws -> Data {
+            try await http.data(endpoint(secrets, file: "player_api.php", action: action), limit: 192 * 1024 * 1024)
+        }
+        async let movieCategories = fetch("get_vod_categories")
+        async let movies = fetch("get_vod_streams")
+        async let seriesCategories = fetch("get_series_categories")
+        async let series = fetch("get_series")
+        var catalog = VODCatalog(sourceID: source.id, fetched: .now)
+        let movieData = try await movies, seriesData = try await series
+        catalog.movieCategories = XtreamVOD.categories((try? await movieCategories) ?? Data())
+        catalog.seriesCategories = XtreamVOD.categories((try? await seriesCategories) ?? Data())
+        catalog.movies = XtreamVOD.movies(movieData, sourceID: source.id)
+        catalog.series = XtreamVOD.series(seriesData, sourceID: source.id)
+        return catalog
+    }
+    func movieDetail(_ movie: Movie, secrets: SourceSecrets) async throws -> MovieDetail {
+        var url = URLComponents(url: try endpoint(secrets, file: "player_api.php", action: "get_vod_info"), resolvingAgainstBaseURL: false)!
+        url.queryItems?.append(URLQueryItem(name: "vod_id", value: movie.providerID))
+        guard let url = url.url else { throw CatalogError.invalidURL }
+        return XtreamVOD.movieDetail(try await http.data(url, limit: 8 * 1024 * 1024))
+    }
+    func seriesDetail(_ series: Series, secrets: SourceSecrets) async throws -> SeriesDetail {
+        var url = URLComponents(url: try endpoint(secrets, file: "player_api.php", action: "get_series_info"), resolvingAgainstBaseURL: false)!
+        url.queryItems?.append(URLQueryItem(name: "series_id", value: series.providerID))
+        guard let url = url.url else { throw CatalogError.invalidURL }
+        return XtreamVOD.seriesDetail(try await http.data(url, limit: 16 * 1024 * 1024), series: series)
+    }
+    nonisolated func vodURL(kind: VODKind, providerID: String, container: String, secrets: SourceSecrets) throws -> URL {
+        XtreamVOD.playbackURL(root: try streamRoot(secrets), path: kind == .movie ? "movie" : "series", username: secrets.username,
+                              password: secrets.password, providerID: providerID, container: container)
+    }
+
     nonisolated func endpoint(_ secrets: SourceSecrets, file: String, action: String? = nil) throws -> URL {
         let base = try HTTPClient.url(secrets.address)
         var components = URLComponents(url: base, resolvingAgainstBaseURL: false)!
@@ -253,14 +289,18 @@ actor ProviderClient {
         return url
     }
 
-    nonisolated func playbackURL(_ channel: Channel, secrets: SourceSecrets) throws -> URL {
-        if let direct = channel.streamURL { return direct }
+    /// The server root streams hang off, without `player_api.php` or a query.
+    nonisolated func streamRoot(_ secrets: SourceSecrets) throws -> URL {
         var base = try HTTPClient.url(secrets.address)
         if base.pathExtension == "php" { base.deleteLastPathComponent() }
         var components = URLComponents(url: base, resolvingAgainstBaseURL: false)!
         components.query = nil; components.fragment = nil
         guard let root = components.url else { throw CatalogError.invalidURL }
-        return root.appending(path: "live").appending(component: secrets.username).appending(component: secrets.password).appending(component: "\(channel.providerID).\(secrets.output)")
+        return root
+    }
+    nonisolated func playbackURL(_ channel: Channel, secrets: SourceSecrets) throws -> URL {
+        if let direct = channel.streamURL { return direct }
+        return try streamRoot(secrets).appending(path: "live").appending(component: secrets.username).appending(component: secrets.password).appending(component: "\(channel.providerID).\(secrets.output)")
     }
 }
 

@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// Teams you follow, leagues you added, and favorite channels.
+/// Teams you follow, leagues you added, movies and shows saved for later,
+/// and favorite channels.
 struct MyStuffView: View {
     @Environment(AppStore.self) private var store
     @State private var picking = false
 
     var body: some View {
-        let teams = store.followedTeams, leagues = store.addedLeagues, channels = store.favorites
+        let teams = store.followedTeams, leagues = store.addedLeagues, channels = store.favorites, later = store.watchLater
         List {
-            if teams.isEmpty && leagues.isEmpty && channels.isEmpty {
+            if teams.isEmpty && leagues.isEmpty && channels.isEmpty && later.isEmpty {
                 ContentUnavailableView {
                     Label("Nothing Here Yet", systemImage: "star")
                 } actions: {
@@ -20,6 +21,7 @@ struct MyStuffView: View {
                     ForEach(teams) { team in
                         NavigationLink { TeamPage(team: team) } label: { SportsItemLabel(item: team) }
                             .swipeActions { Button("Unfollow", role: .destructive) { store.unfollow(team) } }
+                            .contextMenu { Button("Unfollow", systemImage: "minus.circle", role: .destructive) { store.unfollow(team) } }
                             .accessibilityIdentifier("my-stuff-team-\(team.name)")
                     }
                 }
@@ -29,10 +31,12 @@ struct MyStuffView: View {
                     ForEach(leagues) { league in
                         NavigationLink { LeaguePage(league: league) } label: { SportsItemLabel(item: league) }
                             .swipeActions { Button("Remove", role: .destructive) { store.unfollow(league) } }
+                            .contextMenu { Button("Remove League", systemImage: "minus.circle", role: .destructive) { store.unfollow(league) } }
                             .accessibilityIdentifier("my-stuff-league-\(league.name)")
                     }
                 }
             }
+            if !later.isEmpty { WatchLaterSection(items: later) }
             if !channels.isEmpty {
                 Section("Channels") {
                     ForEach(channels) { channel in

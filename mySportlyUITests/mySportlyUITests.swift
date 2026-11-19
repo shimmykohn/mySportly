@@ -24,7 +24,7 @@ final class mySportlyUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Region and Language"].waitForExistence(timeout: 5))
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["Done"].tap()
-        app.selectMainTab("Guide")
+        app.openGuide()
         XCTAssertTrue(app.buttons["Guide Time"].waitForExistence(timeout: 5))
         capture("Guide", app: app)
         app.selectMainTab("My Stuff")
@@ -40,7 +40,7 @@ final class mySportlyUITests: XCTestCase {
         app.launchArguments = ["--demo"]
         app.launch()
         XCTAssertTrue(app.descendants(matching: .any)["home-root"].waitForExistence(timeout: 15))
-        app.selectMainTab("Guide")
+        app.openGuide()
         let timeline = app.switches["Timeline"]
         XCTAssertTrue(timeline.waitForExistence(timeout: 5))
         // The native Toggle exposes its entire wide label row to accessibility;

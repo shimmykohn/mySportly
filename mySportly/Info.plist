@@ -5,6 +5,8 @@
 	<key>CFBundleURLTypes</key>
 	<array><dict><key>CFBundleURLSchemes</key><array><string>mysportly</string></array></dict></array>
 	<key>SportlyCloudEnabled</key><true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array><string>infuse</string><string>vlc-x-callback</string></array>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array><string>app.iska.mysportly.source-refresh</string></array>
 	<key>NSAppTransportSecurity</key>
