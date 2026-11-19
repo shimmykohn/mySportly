@@ -158,9 +158,33 @@ struct TMDBMatchTests {
         #expect(TMDBMatch.best(starWars, title: "Star Wars Episode IV A New Hope", year: 1977)?.id == 11)
         #expect(TMDBMatch.best(starWars, title: "Star Wars Episode IV A New Hope", year: nil) == nil, "Containing names need a year")
         let up = [TMDBReference(id: 22947, title: "Up in the Air", year: 2009)]
-        #expect(TMDBMatch.best(up, title: "Up", year: 2009) == nil, "Too short to count inside another name")
-        let aliens = [TMDBReference(id: 679, title: "Aliens", year: 1979)]
-        #expect(TMDBMatch.best(aliens, title: "Alien", year: 1979) == nil, "Whole words only")
+        #expect(TMDBMatch.best(up, title: "Up", year: 2010) == nil, "Too short to count inside another name")
+        let aliens = [TMDBReference(id: 679, title: "Aliens", year: 1986)]
+        #expect(TMDBMatch.best(aliens, title: "Alien", year: 1985) == nil, "Whole words only")
+    }
+
+    @Test func translatedTitlesTakeTheTopResultFromTheExactYear() {
+        let godfather = [TMDBReference(id: 238, title: "The Godfather", originalTitle: "The Godfather", year: 1972),
+                         TMDBReference(id: 240, title: "The Godfather Part II", year: 1974)]
+        #expect(TMDBMatch.best(godfather, title: "Der Pate", year: 1972)?.id == 238)
+        #expect(TMDBMatch.best(godfather, title: "Der Pate", year: 1973) == nil, "Without the name, only the exact year")
+        #expect(TMDBMatch.best(godfather, title: "Der Pate", year: nil) == nil)
+        #expect(TMDBMatch.best(godfather, title: "Der Pate 2", year: 1974) == nil, "Only TMDB's top result")
+    }
+
+    @Test func aLookupThatKnowsMoreMatchesAgain() {
+        let saved = Date(timeIntervalSince1970: 1_800_000_000)
+        let titleOnly = TMDBLookup(key: "m", kind: .movie, title: "The Lion King")
+        var withYear = titleOnly; withYear.year = 1994
+        var withIMDb = withYear; withIMDb.imdbID = "tt0110357"
+        #expect([titleOnly, withYear, withIMDb].map(\.evidence) == [0, 1, 2])
+        #expect(TMDBLookup(key: "m", kind: .movie, title: "x", tmdbID: 8587).evidence == 3)
+        let fromHome = TMDBMatchRecord(tmdbID: 420818, saved: saved, evidence: titleOnly.evidence)
+        #expect(fromHome.answers(titleOnly, at: saved + 60))
+        #expect(!fromHome.answers(withYear, at: saved + 60), "The page knows the year: match again")
+        let fromPage = TMDBMatchRecord(tmdbID: 8587, saved: saved, evidence: withIMDb.evidence)
+        #expect(fromPage.answers(titleOnly, at: saved + 60) && fromPage.answers(withIMDb, at: saved + 60))
+        #expect(!fromPage.answers(withIMDb, at: saved + 31 * 86_400), "Stale")
     }
 
     @Test func lookupsUseTheProvidersIDsFirst() {

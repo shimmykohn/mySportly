@@ -41,30 +41,36 @@ struct BackdropCarousel: View {
         }
         // A new list starts at its best backdrop; a pause picks up where it was.
         if shown.map({ !run.urls.contains($0.url) }) ?? true { await show(run.urls, from: 0) }
-        guard run.rotate else { return }
-        while !Task.isCancelled {
+        // Every eight seconds the next one, or another try at the first if none
+        // has loaded; three failed turns in a row stop it.
+        var misses = 0
+        while !Task.isCancelled, misses < 3, run.rotate || shown == nil {
             try? await Task.sleep(for: .seconds(8))
-            guard !Task.isCancelled, let current = shown.flatMap({ run.urls.firstIndex(of: $0.url) }) else { return }
-            await show(run.urls, from: current + 1)
+            guard !Task.isCancelled else { return }
+            let next = shown.flatMap { run.urls.firstIndex(of: $0.url) }.map { $0 + 1 } ?? 0
+            misses = await show(run.urls, from: next) ? 0 : misses + 1
         }
     }
 
-    /// Fades to the first backdrop from `start` on that loads.
-    private func show(_ urls: [URL], from start: Int) async {
+    /// Fades to the first backdrop from `start` on that loads; false when none did.
+    @discardableResult private func show(_ urls: [URL], from start: Int) async -> Bool {
         for offset in urls.indices {
             let url = urls[(start + offset) % urls.count]
-            if url == shown?.url { return }
+            if url == shown?.url { return false }
             guard let image = await ArtworkLoader.image(url) else { continue }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return false }
             under = shown?.image
             withAnimation(.easeInOut(duration: 1.6)) {
                 shown = Slide(url: url, image: image)
             } completion: {
+                // A newer fade may have started since; it tidies up after itself.
+                guard shown?.url == url else { return }
                 under = nil
                 coversFallback = true
             }
-            return
+            return true
         }
+        return false
     }
 }
 

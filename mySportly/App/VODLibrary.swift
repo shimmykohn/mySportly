@@ -113,6 +113,7 @@ import Observation
                     VODShelf.recentMovies(shownMovies), genres, movieCopies.merging(seriesCopies) { a, _ in a }, hiddenMovies, hiddenSeries)
         }.value
         (movies, series, movieRows, seriesRows, recentMovies, genres, versions, hiddenCopies, hiddenShows) = built
+        tmdbIndex = nil
         revision += 1
     }
 

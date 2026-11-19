@@ -10,6 +10,9 @@ import Observation
     private(set) var lastProblem: String?
     /// Set when TMDB refuses the token; cleared by a new one.
     @ObservationIgnored private var blocked = false
+    /// Bumped when the token changes: answers to requests made with an old
+    /// one aren't saved, and its refusal doesn't block the new one.
+    @ObservationIgnored private var generation = 0
     @ObservationIgnored private let cache = TMDBCache()
 
     init() { refresh() }
@@ -20,15 +23,15 @@ import Observation
         let token = value.trimmingCharacters(in: .whitespacesAndNewlines)
         if TMDBToken.isAPIKey(token) { throw TokenError.apiKey }
         guard TMDBToken.isReadAccessToken(token) else { throw TokenError.format }
-        try KeychainStore.write(Data(token.utf8), account: Self.account)
-        lastProblem = nil; blocked = false
+        try KeychainStore.write(Data(token.utf8), account: Self.account, thisDeviceOnly: true)
+        lastProblem = nil; blocked = false; generation += 1
         refresh()
     }
 
     /// Also forgets everything fetched with it.
     func remove() throws {
         try KeychainStore.remove(Self.account)
-        lastProblem = nil; blocked = false
+        lastProblem = nil; blocked = false; generation += 1
         refresh()
         Task { await cache.removeAll() }
     }
@@ -40,28 +43,29 @@ import Observation
     }
 
     /// A library title's details: by the provider's TMDB id, else the match
-    /// saved before, else (when `searching`) by IMDb id or a search by title
-    /// and year. Saved copies stand in while fresh, and while TMDB can't be reached.
+    /// saved before (unless this lookup knows more), else (when `searching`)
+    /// by IMDb id or a search by title and year. Saved copies stand in while
+    /// fresh, and while TMDB can't be reached.
     func title(for lookup: TMDBLookup, searching: Bool = true) async -> TMDBTitle? {
         guard configured else { return nil }
         let client = makeClient()
         if let id = lookup.tmdbID, let title = await details(lookup.kind, id: id, client: client) {
-            await cache.saveMatch(TMDBMatchRecord(tmdbID: id, saved: .now), for: lookup.key)
+            await remember(TMDBMatchRecord(tmdbID: id, saved: .now, evidence: lookup.evidence), for: lookup.key, client: client)
             return title
         }
         let saved = await cache.match(lookup.key)
-        if let saved, saved.isFresh(at: .now) || !searching || client == nil {
+        if let saved, saved.answers(lookup, at: .now) || !searching || client == nil {
             guard let id = saved.tmdbID else { return nil }
             return await details(lookup.kind, id: id, client: client)
         }
         guard searching, let client else { return nil }
         do {
             let id = try await match(lookup, client: client)
-            await cache.saveMatch(TMDBMatchRecord(tmdbID: id, saved: .now), for: lookup.key)
+            await remember(TMDBMatchRecord(tmdbID: id, saved: .now, evidence: lookup.evidence), for: lookup.key, client: client)
             guard let id else { return nil }
             return await details(lookup.kind, id: id, client: client)
         } catch {
-            report(error)
+            report(error, from: client)
             guard let id = saved?.tmdbID else { return nil }
             return await details(lookup.kind, id: id, client: client)
         }
@@ -75,10 +79,10 @@ import Observation
         guard let client = makeClient() else { return saved }
         do {
             guard let collection = TMDBDecode.collection(try await client.get(TMDBEndpoint.collection(id)), fetched: .now) else { return saved }
-            await cache.save(collection)
+            if isCurrent(client) { await cache.save(collection) }
             return collection
         } catch {
-            report(error)
+            report(error, from: client)
             return saved
         }
     }
@@ -88,9 +92,10 @@ import Observation
         configured ? await cache.knownMatches() : [:]
     }
 
-    /// The IMDb id when the provider sent one; else a search by title, then
-    /// by title within TMDB's own year filter (any release, or any episode)
-    /// for titles a broad search buries.
+    /// The IMDb id when the provider sent one; else a search by title, then,
+    /// for titles a broad search buries, within TMDB's own year filter: still
+    /// within a year for movies (the filter counts any release), any
+    /// episode's year for shows.
     private func match(_ lookup: TMDBLookup, client: TMDBClient) async throws -> Int? {
         if let imdb = lookup.imdbID, let data = try? await client.get(TMDBEndpoint.find(imdbID: imdb)),
            let id = TMDBDecode.find(data, kind: lookup.kind) { return id }
@@ -100,7 +105,7 @@ import Observation
         if let best = TMDBMatch.best(results, title: title, year: lookup.year) { return best.id }
         guard let year = lookup.year else { return nil }
         let narrowed = TMDBDecode.search(try await client.get(TMDBEndpoint.search(lookup.kind, title: title, year: year)))
-        return TMDBMatch.best(narrowed, title: title, year: nil)?.id
+        return TMDBMatch.best(narrowed, title: title, year: lookup.kind == .movie ? year : nil)?.id
     }
 
     private func details(_ kind: TMDBKind, id: Int, client: TMDBClient?) async -> TMDBTitle? {
@@ -108,23 +113,34 @@ import Observation
         if let saved, saved.isFresh(at: .now) { return saved }
         guard let client else { return saved }
         do {
-            guard let title = TMDBDecode.title(try await client.get(TMDBEndpoint.details(kind, id: id)), kind: kind, fetched: .now) else { return saved }
-            await cache.save(title)
+            let data = try await client.get(TMDBEndpoint.details(kind, id: id)), fetched = Date.now
+            // Popular titles list hundreds of images; decode them off the main actor.
+            let decoded = await Task.detached(priority: .userInitiated) { TMDBDecode.title(data, kind: kind, fetched: fetched) }.value
+            guard let title = decoded else { return saved }
+            if isCurrent(client) { await cache.save(title) }
             return title
         } catch {
-            report(error)
+            report(error, from: client)
             return saved
         }
     }
 
-    private func makeClient() -> TMDBClient? {
-        guard !blocked, let token = token() else { return nil }
-        return TMDBClient(token: token)
+    private func remember(_ record: TMDBMatchRecord, for key: String, client: TMDBClient?) async {
+        guard isCurrent(client) else { return }
+        await cache.saveMatch(record, for: key)
     }
 
+    private func makeClient() -> TMDBClient? {
+        guard !blocked, let token = token() else { return nil }
+        return TMDBClient(token: token, generation: generation)
+    }
+
+    /// Whether `client` was made with the current token.
+    private func isCurrent(_ client: TMDBClient?) -> Bool { client?.generation == generation }
+
     /// Only a refused token is worth telling the user about; being offline isn't.
-    private func report(_ error: Error) {
-        guard let failure = error as? TMDBFailure, failure == .credentials else { return }
+    private func report(_ error: Error, from client: TMDBClient) {
+        guard isCurrent(client), let failure = error as? TMDBFailure, failure == .credentials else { return }
         blocked = true
         lastProblem = failure.errorDescription
     }
@@ -149,6 +165,8 @@ import Observation
 /// URL. Ephemeral: nothing authenticated is cached or stored by the system.
 struct TMDBClient: Sendable {
     let token: String
+    /// `TMDBService`'s token generation when this was made.
+    let generation: Int
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
@@ -187,7 +205,7 @@ actor TMDBCache {
 
     func saveMatch(_ record: TMDBMatchRecord, for key: String) {
         var all = loadedMatches()
-        if let current = all[key], current.tmdbID == record.tmdbID, current.isFresh(at: record.saved) { return }
+        if let current = all[key], current.tmdbID == record.tmdbID, current.evidence >= record.evidence, current.isFresh(at: record.saved) { return }
         all[key] = record
         matches = all
         write(all, to: "matches.json")

@@ -24,6 +24,10 @@ public struct TMDBLookup: Hashable, Sendable {
     public static func show(_ show: Series, detail: SeriesDetail?) -> TMDBLookup {
         TMDBLookup(key: show.id, kind: .tv, title: show.title, year: show.year, tmdbID: detail?.tmdbID ?? show.tmdbID, imdbID: detail?.imdbID)
     }
+
+    /// How much there is to match on: 3 the provider's TMDB id, 2 its IMDb
+    /// id, 1 a year, 0 the title alone.
+    public var evidence: Int { tmdbID != nil ? 3 : imdbID != nil ? 2 : year != nil ? 1 : 0 }
 }
 
 public enum TMDBMatch {
@@ -50,7 +54,8 @@ public enum TMDBMatch {
     /// The search result that is this title: the same name (or original name)
     /// from within a year, the exact year first, otherwise in TMDB's order.
     /// Without a year only the same name counts; with one, a name that
-    /// contains the other as whole words does too.
+    /// contains the other as whole words does too, and so does TMDB's top
+    /// result from that exact year (a translated title, such as "Der Pate").
     public static func best(_ results: [TMDBReference], title: String, year: Int?) -> TMDBReference? {
         let wanted = normalized(title)
         guard !wanted.isEmpty else { return nil }
@@ -67,7 +72,10 @@ public enum TMDBMatch {
             let score = (exact ? 0 : 1, distance, index)
             if best.map({ score < $0.score }) ?? true { best = (score, result) }
         }
-        return best?.result
+        if let best { return best.result }
+        // TMDB searches translated and alternative titles too, which it doesn't return.
+        guard let year, let top = results.first, top.year == year else { return nil }
+        return top
     }
 
     /// `part` (four letters or more) as whole words inside a longer `whole`.
@@ -94,14 +102,19 @@ public enum TMDBCachePolicy {
     }
 }
 
-/// A library title's TMDB id, or that nothing matched, and when that was found.
+/// A library title's TMDB id, or that nothing matched: when, and from how much.
 public struct TMDBMatchRecord: Codable, Hashable, Sendable {
     public var tmdbID: Int?
     public var saved: Date
-    public init(tmdbID: Int?, saved: Date) { self.tmdbID = tmdbID; self.saved = saved }
+    /// The lookup's `evidence` when it was made.
+    public var evidence: Int
+    public init(tmdbID: Int?, saved: Date, evidence: Int = 0) { self.tmdbID = tmdbID; self.saved = saved; self.evidence = evidence }
     public func isFresh(at date: Date) -> Bool {
         TMDBCachePolicy.isFresh(saved, maxAge: tmdbID == nil ? TMDBCachePolicy.miss : TMDBCachePolicy.match, at: date)
     }
+    /// Fresh, and made from at least what `lookup` knows. A lookup that knows
+    /// more (the page's year or IMDb id, after Home's title-only one) matches again.
+    public func answers(_ lookup: TMDBLookup, at date: Date) -> Bool { isFresh(at: date) && evidence >= lookup.evidence }
 }
 
 extension TMDBTitle {

@@ -12,9 +12,11 @@ struct SourceSecrets: Codable, Sendable {
 }
 
 enum KeychainStore {
-    static func write(_ data: Data, account: String, sync: Bool = false) throws {
+    /// `thisDeviceOnly` also keeps the item out of backups restored to another device.
+    static func write(_ data: Data, account: String, sync: Bool = false, thisDeviceOnly: Bool = false) throws {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "app.iska.mysportly", kSecAttrAccount as String: account, kSecAttrSynchronizable as String: sync]
-        let attributes: [String: Any] = [kSecValueData as String: data, kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
+        let accessible = thisDeviceOnly ? kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly : kSecAttrAccessibleAfterFirstUnlock
+        let attributes: [String: Any] = [kSecValueData as String: data, kSecAttrAccessible as String: accessible]
         let result = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if result == errSecItemNotFound {
             var new = query; attributes.forEach { new[$0.key] = $0.value }
