@@ -1,6 +1,23 @@
 # mySportly
 
-A native SwiftUI live TV app for iPhone and iPad, targeting iOS/iPadOS 27.0+ with Xcode 27.1. It turns a large Xtream/M3U catalog into an Apple TV–style Home around the teams, leagues and channels you care about.
+A native SwiftUI live TV app for iPhone and iPad that turns a huge channel catalog into an Apple TV–style Home built around the teams, leagues and channels you care about.
+
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="Home, with a followed team's live game as the hero" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/my-stuff.png" alt="My Stuff, listing followed teams, leagues and favorite channels" width="30%">
+  &nbsp;
+  <img src="docs/screenshots/search.png" alt="Search, with browse buttons for sports and categories" width="30%">
+</p>
+
+<p align="center"><sub>Screenshots use the built-in sample catalog.</sub></p>
+
+- **Follow teams, not channel numbers.** Home leads with your team's live game, then what's on later across your leagues and favorite channels.
+- **Bring your own source.** Connect an Xtream Codes or M3U provider you already use. mySportly ships no channels, streams or accounts of its own.
+- **Private by design.** Provider logins and API keys stay in the device Keychain, catalogs are encrypted on device, and there is no mySportly server.
+- **Native throughout.** SwiftUI, AVKit playback with AirPlay and Picture in Picture, iCloud sync for your follows, and an adaptive iPad layout.
+
+Targets iOS and iPadOS 27.0+ and builds with Xcode 27.1 or later.
 
 ## Open and run
 
